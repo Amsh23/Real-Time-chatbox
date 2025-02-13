@@ -1,4 +1,3 @@
-![image](https://github.com/user-attachments/assets/91b74f17-60bb-4a33-bbbb-8efa569e8a48)این هم فایل کامل `README.md` به زبان فارسی و انگلیسی:  
 
 ---
 
