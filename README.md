@@ -82,12 +82,12 @@ https://USERNAME.github.io/real-time-chatbox/
 ## **📊 Architecture Diagram**  
 ```mermaid
 graph TD;
-    User1[👤 User 1] -->|Messages| Server[🖥️ Server (Node.js)];
-    User2[👤 User 2] -->|Messages| Server;
-    Server -->|Broadcast| User1;
-    Server -->|Broadcast| User2;
-    Server -.->|Hosted on| Render[☁ Render];
-    Client[💻 Client (HTML/CSS/JS)] -.->|Hosted on| GitHubPages[🌍 GitHub Pages];
+    User1["User 1"] -->|"Messages"| Server["Server (Node.js)"];
+    User2["User 2"] -->|"Messages"| Server;
+    Server -->|"Broadcast"| User1;
+    Server -->|"Broadcast"| User2;
+    Server -.->|"Hosted on"| Render["Render"];
+    Client["Client (HTML/CSS/JS)"] -.->|"Hosted on"| GitHubPages["GitHub Pages"];
 ```
 
 ---
@@ -183,12 +183,12 @@ https://USERNAME.github.io/real-time-chatbox/
 ## **📊 دیاگرام معماری**  
 ```mermaid
 graph TD;
-    User1[👤 کاربر ۱] -->|ارسال پیام| Server[🖥️ سرور (Node.js)];
-    User2[👤 کاربر ۲] -->|ارسال پیام| Server;
-    Server -->|پخش پیام| User1;
-    Server -->|پخش پیام| User2;
-    Server -.->|میزبانی در| Render[☁ Render];
-    Client[💻 کلاینت (HTML/CSS/JS)] -.->|میزبانی در| GitHubPages[🌍 GitHub Pages];
+    User1["کاربر ۱"] -->|"ارسال پیام"| Server["سرور (Node.js)"];
+    User2["کاربر ۲"] -->|"ارسال پیام"| Server;
+    Server -->|"پخش پیام"| User1;
+    Server -->|"پخش پیام"| User2;
+    Server -.->|"میزبانی در"| Render["Render"];
+    Client["کلاینت (HTML/CSS/JS)"] -.->|"میزبانی در"| GitHubPages["GitHub Pages"];
 ```
 
 ---
