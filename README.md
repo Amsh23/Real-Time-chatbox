@@ -1,4 +1,4 @@
-این هم فایل کامل `README.md` به زبان فارسی و انگلیسی:  
+![image](https://github.com/user-attachments/assets/91b74f17-60bb-4a33-bbbb-8efa569e8a48)این هم فایل کامل `README.md` به زبان فارسی و انگلیسی:  
 
 ---
 
@@ -8,7 +8,7 @@
 
 A **real-time chat application** built with **Node.js, Express, and WebSocket**, deployed on **Render**, and hosted on **GitHub Pages**.  
 
-![Chatbox Preview](https://via.placeholder.com/800x400.png?text=Chatbox+Demo)  
+![Chatbox Preview][(https://via.placeholder.com/800x400.png?text=Chatbox+Demo)](https://github.com/user-attachments/assets/fd40bfba-3e97-4101-8bfa-d2aec9642868)  
 
 ## **✨ Features**  
 ✔️ Real-time messaging 📡  
@@ -83,10 +83,12 @@ https://USERNAME.github.io/real-time-chatbox/
 ## **📊 Architecture Diagram**  
 ```mermaid
 graph TD;
-    User1[👤 User 1] -- Messages --> Server(Node.js) -- Broadcast --> User2[👤 User 2]
-    User2 -- Messages --> Server(Node.js) -- Broadcast --> User1
-    Server(Node.js) -- Hosted on --> Render
-    Client(HTML/CSS/JS) -- Hosted on --> GitHub Pages
+    User1[👤 User 1] -->|Messages| Server[🖥️ Server (Node.js)];
+    User2[👤 User 2] -->|Messages| Server;
+    Server -->|Broadcast| User1;
+    Server -->|Broadcast| User2;
+    Server -.->|Hosted on| Render[☁ Render];
+    Client[💻 Client (HTML/CSS/JS)] -.->|Hosted on| GitHubPages[🌍 GitHub Pages];
 ```
 
 ---
@@ -107,7 +109,7 @@ graph TD;
 
 یک **اپلیکیشن چت زنده** ساخته شده با **Node.js، Express و WebSocket** که روی **Render** برای بک‌اند و **GitHub Pages** برای فرانت‌اند دیپلوی شده است.  
 
-![پیش نمایش چت](https://via.placeholder.com/800x400.png?text=پیش+نمایش+چت)  
+![پیش نمایش چت]https://github.com/user-attachments/assets/fd40bfba-3e97-4101-8bfa-d2aec9642868=پیش+نمایش+چت)  
 
 ## **✨ ویژگی‌ها**  
 ✔️ ارسال و دریافت پیام در لحظه 📡  
@@ -182,10 +184,12 @@ https://USERNAME.github.io/real-time-chatbox/
 ## **📊 دیاگرام معماری**  
 ```mermaid
 graph TD;
-    User1[👤 کاربر ۱] -- ارسال پیام --> Server(Node.js) -- پخش پیام --> User2[👤 کاربر ۲]
-    User2 -- ارسال پیام --> Server(Node.js) -- پخش پیام --> User1
-    Server(Node.js) -- میزبانی در --> Render
-    Client(HTML/CSS/JS) -- میزبانی در --> GitHub Pages
+    User1[👤 کاربر ۱] -->|ارسال پیام| Server[🖥️ سرور (Node.js)];
+    User2[👤 کاربر ۲] -->|ارسال پیام| Server;
+    Server -->|پخش پیام| User1;
+    Server -->|پخش پیام| User2;
+    Server -.->|میزبانی در| Render[☁ Render];
+    Client[💻 کلاینت (HTML/CSS/JS)] -.->|میزبانی در| GitHubPages[🌍 GitHub Pages];
 ```
 
 ---
