@@ -1,19 +1,17 @@
-
----
-
 ## **📌 README for GitHub (Detailed & Illustrated)**  
 
 # 🌐 Real-Time Chatbox 🚀  
 
 A **real-time chat application** built with **Node.js, Express, and WebSocket**, deployed on **Render**, and hosted on **GitHub Pages**.  
 
-![Chatbox Preview][(https://via.placeholder.com/800x400.png?text=Chatbox+Demo)](https://github.com/user-attachments/assets/fd40bfba-3e97-4101-8bfa-d2aec9642868)  
+### 🌍 Live Demo: [Real-Time Chatbox](https://real-time-chatbox.onrender.com/)
 
 ## **✨ Features**  
 ✔️ Real-time messaging 📡  
 ✔️ WebSocket-based communication 🔄  
 ✔️ Fully responsive UI 🎨  
 ✔️ Hosted on **Render (Backend)** & **GitHub Pages (Frontend)** 🌍  
+✔️ Open-source and easy to deploy 🚀  
 
 ---
 
@@ -46,7 +44,7 @@ node server.js
 2️⃣ Click **New Web Service** and select **Connect a repository**.  
 3️⃣ Choose your **GitHub repository** (`real-time-chatbox`) and click **Connect**.  
 4️⃣ Set up the service:  
-   - **Runtime:** `Node`  
+   - **Runtime:** `Node.js`  
    - **Branch:** `main`  
    - **Build Command:**  
      ```bash
@@ -108,13 +106,14 @@ graph TD;
 
 یک **اپلیکیشن چت زنده** ساخته شده با **Node.js، Express و WebSocket** که روی **Render** برای بک‌اند و **GitHub Pages** برای فرانت‌اند دیپلوی شده است.  
 
-![پیش نمایش چت]https://github.com/user-attachments/assets/fd40bfba-3e97-4101-8bfa-d2aec9642868=پیش+نمایش+چت)  
+### 🌍 مشاهده نسخه زنده: [Real-Time Chatbox](https://real-time-chatbox.onrender.com/)
 
 ## **✨ ویژگی‌ها**  
 ✔️ ارسال و دریافت پیام در لحظه 📡  
 ✔️ ارتباط با **WebSocket** 🔄  
 ✔️ رابط کاربری واکنش‌گرا 🎨  
 ✔️ میزبانی شده روی **Render (بک‌اند)** و **GitHub Pages (فرانت‌اند)** 🌍  
+✔️ متن‌باز و قابل استقرار آسان 🚀  
 
 ---
 
@@ -147,7 +146,7 @@ node server.js
 2️⃣ روی **New Web Service** کلیک کرده و **Connect a repository** را انتخاب کنید.  
 3️⃣ مخزن **GitHub** خود (`real-time-chatbox`) را انتخاب کرده و **Connect** بزنید.  
 4️⃣ تنظیمات را وارد کنید:  
-   - **Runtime:** `Node`  
+   - **Runtime:** `Node.js`  
    - **Branch:** `main`  
    - **Build Command:**  
      ```bash
@@ -178,35 +177,3 @@ https://real-time-chatbox.onrender.com
 https://USERNAME.github.io/real-time-chatbox/
 ```
 
----
-
-## **📊 دیاگرام معماری**  
-```mermaid
-graph TD;
-    User1["کاربر ۱"] -->|"ارسال پیام"| Server["سرور (Node.js)"];
-    User2["کاربر ۲"] -->|"ارسال پیام"| Server;
-    Server -->|"پخش پیام"| User1;
-    Server -->|"پخش پیام"| User2;
-    Server -.->|"میزبانی در"| Render["Render"];
-    Client["کلاینت (HTML/CSS/JS)"] -.->|"میزبانی در"| GitHubPages["GitHub Pages"];
-```
-
----
-
-## **🛠️ تکنولوژی‌های استفاده شده**  
-- 🚀 **Node.js** – بک‌اند  
-- ⚡ **Express.js** – فریم‌ورک سرور  
-- 🔗 **WebSocket** – ارتباط زنده  
-- ☁ **Render & GitHub Pages** – میزبانی  
-
-📬 **توسعه داده شده توسط [Amsh] – آماده همکاری!** 🚀  
-
----
-
-### **🔹 چرا این README بهترین گزینه است؟**  
-✅ **دارای تصاویر و دیاگرام‌های مفهومی** برای درک بهتر  
-✅ **راهنمای گام‌به‌گام** برای اجرای پروژه  
-✅ **نسخه دوزبانه (انگلیسی و فارسی)** برای کاربران مختلف  
-✅ **دستورات سریع و کاربردی** برای توسعه‌دهندگان  
-
-اگر تغییر یا اصلاحی لازم است، اطلاع دهید! 🚀
