@@ -1,4 +1,7 @@
-## **📌 README for GitHub (Detailed & Illustrated)**  
+
+---
+
+## **📌 README (Detailed & Illustrated)**  
 
 # 🌐 Real-Time Chatbox 🚀  
 
@@ -44,7 +47,7 @@ node server.js
 2️⃣ Click **New Web Service** and select **Connect a repository**.  
 3️⃣ Choose your **GitHub repository** (`real-time-chatbox`) and click **Connect**.  
 4️⃣ Set up the service:  
-   - **Runtime:** `Node.js`  
+   - **Runtime:** `Node`  
    - **Branch:** `main`  
    - **Build Command:**  
      ```bash
@@ -114,6 +117,7 @@ graph TD;
 ✔️ رابط کاربری واکنش‌گرا 🎨  
 ✔️ میزبانی شده روی **Render (بک‌اند)** و **GitHub Pages (فرانت‌اند)** 🌍  
 ✔️ متن‌باز و قابل استقرار آسان 🚀  
+ 
 
 ---
 
@@ -146,7 +150,7 @@ node server.js
 2️⃣ روی **New Web Service** کلیک کرده و **Connect a repository** را انتخاب کنید.  
 3️⃣ مخزن **GitHub** خود (`real-time-chatbox`) را انتخاب کرده و **Connect** بزنید.  
 4️⃣ تنظیمات را وارد کنید:  
-   - **Runtime:** `Node.js`  
+   - **Runtime:** `Node`  
    - **Branch:** `main`  
    - **Build Command:**  
      ```bash
@@ -177,3 +181,27 @@ https://real-time-chatbox.onrender.com
 https://USERNAME.github.io/real-time-chatbox/
 ```
 
+---
+
+## **📊 دیاگرام معماری**  
+```mermaid
+graph TD;
+    User1["کاربر ۱"] -->|"ارسال پیام"| Server["سرور (Node.js)"];
+    User2["کاربر ۲"] -->|"ارسال پیام"| Server;
+    Server -->|"پخش پیام"| User1;
+    Server -->|"پخش پیام"| User2;
+    Server -.->|"میزبانی در"| Render["Render"];
+    Client["کلاینت (HTML/CSS/JS)"] -.->|"میزبانی در"| GitHubPages["GitHub Pages"];
+```
+
+---
+
+## **🛠️ تکنولوژی‌های استفاده شده**  
+- 🚀 **Node.js** – بک‌اند  
+- ⚡ **Express.js** – فریم‌ورک سرور  
+- 🔗 **WebSocket** – ارتباط زنده  
+- ☁ **Render & GitHub Pages** – میزبانی  
+
+📬 **توسعه داده شده توسط [Amsh] – آماده همکاری!** 🚀  
+
+---
