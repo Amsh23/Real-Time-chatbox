@@ -5,92 +5,228 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>چت پیشرفته</title>
     <style>
+        :root {
+            --primary: #4361ee;
+            --secondary: #3a0ca3;
+            --accent: #4895ef;
+            --dark: #1b263b;
+            --light: #f8f9fa;
+        }
+        
         * {
             box-sizing: border-box;
             font-family: 'Vazirmatn', sans-serif;
         }
+        
         body {
             margin: 0;
-            padding: 20px;
-            background: #f5f5f5;
+            padding: 0;
+            background: var(--light);
+            color: var(--dark);
         }
-        .chat-container {
-            max-width: 800px;
+        
+        .app-container {
+            display: flex;
+            height: 100vh;
+            max-width: 1200px;
             margin: 0 auto;
-            background: white;
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
-        #chat {
-            height: 60vh;
+        
+        .sidebar {
+            width: 280px;
+            background: var(--dark);
+            color: white;
             padding: 15px;
             overflow-y: auto;
         }
-        .message {
-            margin-bottom: 15px;
-            padding: 10px 15px;
-            border-radius: 15px;
-            max-width: 80%;
-            word-break: break-word;
-            position: relative;
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
         }
+        
+        .chat-header {
+            padding: 15px;
+            background: var(--primary);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        #chat {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: white;
+        }
+        
+        .input-area {
+            display: flex;
+            gap: 10px;
+            padding: 15px;
+            background: var(--light);
+            border-top: 1px solid #ddd;
+        }
+        
+        #messageInput {
+            flex: 1;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 25px;
+            font-size: 16px;
+        }
+        
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .message {
+            margin: 15px 0;
+            padding: 12px 15px;
+            border-radius: 15px;
+            max-width: 70%;
+            position: relative;
+            word-break: break-word;
+        }
+        
         .my-message {
-            background: #dcf8c6;
+            background: var(--accent);
+            color: white;
             margin-left: auto;
         }
+        
         .other-message {
             background: #f1f1f1;
             margin-right: auto;
         }
-        .input-area {
-            display: flex;
-            padding: 15px;
-            background: #eee;
-            border-top: 1px solid #ddd;
+        
+        .message-time {
+            font-size: 0.7em;
+            opacity: 0.8;
+            margin-top: 5px;
         }
-        #messageInput {
-            flex: 1;
-            padding: 12px;
-            border: 1px solid #ddd;
-            border-radius: 20px;
-            font-size: 16px;
-        }
-        #sendBtn {
-            margin-right: 10px;
-            padding: 0 20px;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 20px;
-            cursor: pointer;
-        }
-        .online-counter {
-            background: #4CAF50;
-            color: white;
-            padding: 5px 10px;
-            border-radius: 20px;
-            display: inline-block;
-            margin: 10px;
-        }
+        
         .delete-btn {
             position: absolute;
-            left: 5px;
             top: 5px;
+            left: 5px;
             background: none;
             border: none;
             color: red;
             cursor: pointer;
         }
+        
+        .sticker {
+            width: 100px;
+            height: 100px;
+            object-fit: contain;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .sticker:hover {
+            transform: scale(1.1);
+        }
+        
+        .sticker-message {
+            width: 80px;
+            height: 80px;
+        }
+        
+        .game-panel {
+            position: fixed;
+            bottom: 100px;
+            right: 30px;
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 100;
+        }
     </style>
 </head>
 <body>
-    <div class="chat-container">
-        <div class="online-counter">آنلاین: <span id="onlineCount">0</span></div>
-        <div id="chat"></div>
-        <div class="input-area">
-            <input id="messageInput" placeholder="پیام خود را بنویسید..." autocomplete="off">
-            <button id="sendBtn">ارسال</button>
+    <div class="app-container">
+        <!-- سایدبار -->
+        <div class="sidebar">
+            <!-- 2. پروفایل کاربری -->
+            <div class="profile-section">
+                <h3>پروفایل</h3>
+                <input id="usernameInput" placeholder="نام کاربری">
+                <button id="saveUsername" class="btn btn-primary">ذخیره</button>
+            </div>
+            
+            <!-- 5. تعداد آنلاین‌ها -->
+            <div class="online-counter">
+                <h4>👥 کاربران آنلاین: <span id="onlineCount">0</span></h4>
+            </div>
+            
+            <!-- 3. گروه‌ها -->
+            <div class="groups-section">
+                <h3>گروه‌ها</h3>
+                <button id="createGroupBtn" class="btn btn-primary">ساخت گروه</button>
+                <div id="groupsList"></div>
+            </div>
+            
+            <!-- 7. تاپیک‌ها -->
+            <div class="topics-section">
+                <h3>تاپیک‌ها</h3>
+                <select id="topicSelect" class="btn">
+                    <option value="عمومی">🔊 عمومی</option>
+                    <option value="فنی">💻 فنی</option>
+                    <option value="گیم">🎮 گیم</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- محتوای اصلی -->
+        <div class="main-content">
+            <div class="chat-header">
+                <h2 id="currentTopic">🔊 عمومی</h2>
+                <button id="gameBtn" class="btn">🎮 بازی</button>
+            </div>
+            
+            <!-- چت -->
+            <div id="chat"></div>
+            
+            <!-- 1. ورودی پیام -->
+            <div class="input-area">
+                <input id="messageInput" placeholder="پیام خود را بنویسید..." autocomplete="off">
+                <button id="sendBtn" class="btn btn-primary">ارسال</button>
+                <button id="stickerBtn" class="btn">😀</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 8. پنل بازی -->
+    <div id="gamePanel" class="game-panel" style="display: none;">
+        <h3>سنگ ✊ کاغذ ✋ قیچی ✌️</h3>
+        <div class="game-choices">
+            <button class="game-choice" data-choice="✊">✊</button>
+            <button class="game-choice" data-choice="✋">✋</button>
+            <button class="game-choice" data-choice="✌️">✌️</button>
+        </div>
+    </div>
+    
+    <!-- 10. پنل استیکر -->
+    <div id="stickerPanel" class="game-panel" style="display: none;">
+        <h3>استیکرها</h3>
+        <div class="stickers-container">
+            <img src="/stickers/sticker1.png" class="sticker" data-id="1">
+            <img src="/stickers/sticker2.png" class="sticker" data-id="2">
+            <img src="/stickers/sticker3.png" class="sticker" data-id="3">
         </div>
     </div>
 
