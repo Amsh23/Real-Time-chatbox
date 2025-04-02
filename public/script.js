@@ -1,112 +1,62 @@
 const socket = io();
-const messageInput = document.getElementById('messageInput');
 const chat = document.getElementById('chat');
-let lastMessageTime = 0;
+const messageInput = document.getElementById('messageInput');
+const onlineCount = document.getElementById('onlineCount');
 
-// 1. پروفایل کاربری
-document.getElementById('save-username').addEventListener('click', () => {
-    const username = document.getElementById('username').value.trim();
-    if(username) {
-        localStorage.setItem('username', username);
-        socket.emit('set-username', username);
-    }
-});
+// تنظیم نام کاربری
+let username = localStorage.getItem('username') || prompt('لطفاً نام کاربری خود را وارد کنید:') || 'کاربر';
+localStorage.setItem('username', username);
+socket.emit('set-username', username);
 
-// 2. ارسال پیام با پاک شدن خودکار
+// ارسال پیام
 function sendMessage() {
-    const now = Date.now();
-    if(now - lastMessageTime < 3000) {
-        alert('⏳ لطفاً 3 ثانیه بین ارسال پیام‌ها فاصله بگذارید!');
-        return;
-    }
-    
     const message = messageInput.value.trim();
-    if(message) {
-        const topic = document.getElementById('topic').value;
-        const username = localStorage.getItem('username') || 'ناشناس';
-        
-        socket.emit('chat-message', {
-            text: message,
-            username,
-            topic,
-            timestamp: now
-        });
-        
+    if (message) {
+        socket.emit('send-message', { text: message });
         messageInput.value = '';
-        lastMessageTime = now;
     }
 }
 
-// 3. سیستم گروه‌ها
-document.getElementById('create-group').addEventListener('click', () => {
-    const members = prompt('آی‌دی کاربران را وارد کنید (با کاما جدا کنید):');
-    if(members) {
-        socket.emit('create-group', {
-            name: `گروه ${Date.now().toString(36)}`,
-            members: members.split(',')
-        });
-    }
+document.getElementById('sendBtn').addEventListener('click', sendMessage);
+messageInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') sendMessage();
 });
 
-// 4. استیکرها
-document.querySelectorAll('.sticker').forEach(sticker => {
-    sticker.addEventListener('click', () => {
-        socket.emit('sticker', {
-            id: sticker.dataset.id,
-            sender: localStorage.getItem('username')
-        });
-    });
-});
-
-// 5. مینی گیم (سنگ-کاغذ-قیچی)
-document.getElementById('game-btn').addEventListener('click', () => {
-    const choice = prompt('انتخاب کنید (✊, ✋, ✌️):');
-    if(choice) socket.emit('game-choice', choice);
-});
-
-// 6. نمایش پیام‌ها
-socket.on('chat-message', (data) => {
+// دریافت پیام جدید
+socket.on('new-message', (data) => {
+    const isMe = data.username === username;
     const messageElement = document.createElement('div');
-    messageElement.className = `message ${data.isMe ? 'my-message' : 'other-message'}`;
+    messageElement.className = `message ${isMe ? 'my-message' : 'other-message'}`;
+    messageElement.id = `msg-${data.id}`;
+    
     messageElement.innerHTML = `
-        <strong>${data.username}</strong> (${data.topic}):
-        ${data.text}
-        <span class="message-time">${new Date(data.timestamp).toLocaleTimeString('fa-IR')}</span>
-        ${data.isMe ? `<button class="delete-btn" data-id="${data.id}">🗑️</button>` : ''}
+        ${isMe ? '<button class="delete-btn" onclick="deleteMessage(\'' + data.id + '\')">×</button>' : ''}
+        <strong>${data.username}</strong>
+        <div>${data.text}</div>
+        <small>${new Date(data.timestamp).toLocaleTimeString('fa-IR')}</small>
     `;
+    
     chat.appendChild(messageElement);
     chat.scrollTop = chat.scrollHeight;
 });
 
-// 7. مدیریت سایر رویدادها
+// حذف پیام
+window.deleteMessage = function(messageId) {
+    socket.emit('delete-message', messageId);
+    document.getElementById(`msg-${messageId}`)?.remove();
+};
+
+socket.on('message-deleted', (messageId) => {
+    document.getElementById(`msg-${messageId}`)?.remove();
+});
+
+// به‌روزرسانی تعداد کاربران آنلاین
 socket.on('online-count', (count) => {
-    document.getElementById('online-count').textContent = count;
+    onlineCount.textContent = count;
 });
 
-socket.on('sticker', (data) => {
-    const stickerElement = document.createElement('img');
-    stickerElement.className = 'sticker-message';
-    stickerElement.src = `sticker${data.id}.png`;
-    chat.appendChild(stickerElement);
-});
-
-socket.on('game-result', (result) => {
-    alert(`🎮 نتیجه بازی: ${result}`);
-});
-
-// 8. حذف پیام
-document.addEventListener('click', (e) => {
-    if(e.target.classList.contains('delete-btn')) {
-        const messageId = e.target.dataset.id;
-        socket.emit('delete-message', messageId);
-        e.target.parentElement.remove();
-    }
-});
-
-// راه‌اندازی اولیه
-window.addEventListener('load', () => {
-    messageInput.focus();
-    if(localStorage.getItem('username')) {
-        document.getElementById('username').value = localStorage.getItem('username');
-    }
+// مدیریت اتصال مجدد
+socket.on('connect', () => {
+    console.log('به سرور متصل شدید');
+    socket.emit('set-username', username);
 });
