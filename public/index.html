@@ -1,14 +1,56 @@
 <!DOCTYPE html>
-<html lang="fa">
+<html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <title>چت آنلاین</title>
     <script src="/socket.io/socket.io.js"></script>
     <script defer src="script.js"></script>
+    <style>
+        /* استایل دکمه CBox */
+        #cbox-toggle {
+            position: fixed;
+            left: 20px;
+            bottom: 20px;
+            padding: 10px 15px;
+            background: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            z-index: 1000;
+        }
+        
+        /* استایل چت باکس داخلی */
+        #chat {
+            margin-bottom: 70px;
+        }
+    </style>
 </head>
 <body>
+    <div id="chat"></div>
     <input id="messageInput" type="text" placeholder="پیام بنویس...">
     <button onclick="sendMessage()">ارسال</button>
-    <div id="chat"></div>
+
+    <!-- دکمه CBox.ws -->
+    <button id="cbox-toggle">چت عمومی (CBox)</button>
+
+    <!-- اسکریپت CBox.ws -->
+    <script>
+        window['CboxReady'] = function (Cbox) {
+            Cbox('button', '5-956163-k2jrn5');
+        };
+    </script>
+    <script src="https://static.cbox.ws/embed/2.js" async></script>
+
+    <!-- منطق نمایش/مخفی کردن CBox -->
+    <script>
+        document.getElementById('cbox-toggle').addEventListener('click', function() {
+            const cboxIframe = document.querySelector('#cbox-div iframe');
+            if (cboxIframe) {
+                cboxIframe.style.display = cboxIframe.style.display === 'none' ? 'block' : 'none';
+                this.textContent = cboxIframe.style.display === 'none' ? 'چت عمومی (CBox)' : 'بستن چت';
+            }
+        });
+    </script>
 </body>
 </html>
