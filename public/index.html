@@ -1,151 +1,100 @@
-
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>چت پیشرفته</title>
-    <script src="/socket.io/socket.io.js"></script>
     <style>
-        :root {
-            --primary: #4361ee;
-            --secondary: #3f37c9;
-            --dark: #1b263b;
-            --light: #f8f9fa;
-        }
-        
-        body {
+        * {
+            box-sizing: border-box;
             font-family: 'Vazirmatn', sans-serif;
+        }
+        body {
             margin: 0;
-            padding: 0;
-            background: var(--light);
-        }
-        
-        .container {
-            display: flex;
-            height: 100vh;
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-        
-        .sidebar {
-            width: 250px;
-            background: var(--dark);
-            color: white;
-            padding: 15px;
-            border-left: 1px solid #444;
-        }
-        
-        .chat-area {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        #chat {
-            flex: 1;
             padding: 20px;
-            overflow-y: auto;
-            background: white;
+            background: #f5f5f5;
         }
-        
+        .chat-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        #chat {
+            height: 60vh;
+            padding: 15px;
+            overflow-y: auto;
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 15px;
+            max-width: 80%;
+            word-break: break-word;
+            position: relative;
+        }
+        .my-message {
+            background: #dcf8c6;
+            margin-left: auto;
+        }
+        .other-message {
+            background: #f1f1f1;
+            margin-right: auto;
+        }
         .input-area {
             display: flex;
-            gap: 10px;
             padding: 15px;
-            background: var(--light);
+            background: #eee;
             border-top: 1px solid #ddd;
         }
-        
         #messageInput {
             flex: 1;
             padding: 12px;
             border: 1px solid #ddd;
-            border-radius: 25px;
-            font-family: 'Vazirmatn';
+            border-radius: 20px;
+            font-size: 16px;
         }
-        
-        .message {
-            margin: 10px 0;
-            padding: 12px 15px;
-            border-radius: 15px;
-            max-width: 70%;
-            word-wrap: break-word;
-            position: relative;
-        }
-        
-        .my-message {
-            background: var(--primary);
+        #sendBtn {
+            margin-right: 10px;
+            padding: 0 20px;
+            background: #4CAF50;
             color: white;
-            margin-left: auto;
-        }
-        
-        .sticker {
-            width: 50px;
-            height: 50px;
+            border: none;
+            border-radius: 20px;
             cursor: pointer;
-            transition: transform 0.2s;
         }
-        
-        .sticker:hover {
-            transform: scale(1.1);
+        .online-counter {
+            background: #4CAF50;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 20px;
+            display: inline-block;
+            margin: 10px;
         }
-        
-        .game-panel {
-            position: fixed;
-            bottom: 80px;
-            right: 20px;
-            background: white;
-            padding: 15px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        .delete-btn {
+            position: absolute;
+            left: 5px;
+            top: 5px;
+            background: none;
+            border: none;
+            color: red;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <!-- سایدبار -->
-        <div class="sidebar">
-            <div id="profile-section">
-                <input id="username" placeholder="نام کاربری">
-                <button id="save-username">ذخیره</button>
-            </div>
-            <div class="online-counter">
-                🟢 آنلاین: <span id="online-count">0</span>
-            </div>
-            <div id="groups-list">
-                <button id="create-group">ساخت گروه جدید</button>
-            </div>
-        </div>
-
-        <!-- ناحیه چت -->
-        <div class="chat-area">
-            <div id="topic-selector">
-                <select id="topic">
-                    <option value="عمومی">🔊 عمومی</option>
-                    <option value="فنی">💻 فنی</option>
-                    <option value="گیم">🎮 گیم</option>
-                </select>
-            </div>
-            
-            <div id="chat"></div>
-            
-            <div class="input-area">
-                <input id="messageInput" placeholder="پیام خود را بنویسید...">
-                <button id="send-btn">ارسال</button>
-                <button id="sticker-btn">😀</button>
-                <button id="game-btn">🎮 بازی</button>
-            </div>
+    <div class="chat-container">
+        <div class="online-counter">آنلاین: <span id="onlineCount">0</span></div>
+        <div id="chat"></div>
+        <div class="input-area">
+            <input id="messageInput" placeholder="پیام خود را بنویسید..." autocomplete="off">
+            <button id="sendBtn">ارسال</button>
         </div>
     </div>
 
-    <!-- پنل استیکر -->
-    <div id="sticker-panel" class="game-panel">
-        <img src="sticker1.png" class="sticker" data-id="1">
-        <img src="sticker2.png" class="sticker" data-id="2">
-        <img src="sticker3.png" class="sticker" data-id="3">
-    </div>
-
+    <script src="/socket.io/socket.io.js"></script>
     <script src="/script.js"></script>
 </body>
 </html>
