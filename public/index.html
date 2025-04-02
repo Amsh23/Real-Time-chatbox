@@ -2,34 +2,92 @@
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>چت آنلاین</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>چت آنلاین پیشرفته</title>
     <script src="/socket.io/socket.io.js"></script>
     <script defer src="script.js"></script>
     <style>
+        /* استایل‌های پایه */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        /* استایل چت باکس داخلی */
+        #chat {
+            margin-bottom: 80px;
+            max-height: 70vh;
+            overflow-y: auto;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        
+        /* استایل بخش ارسال پیام */
+        #messageInput {
+            width: calc(100% - 90px);
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            margin-right: 10px;
+            font-size: 16px;
+        }
+        
+        button {
+            padding: 12px 20px;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #3367d6;
+        }
+        
         /* استایل دکمه CBox */
         #cbox-toggle {
             position: fixed;
             left: 20px;
             bottom: 20px;
-            padding: 10px 15px;
-            background: #4285f4;
+            padding: 12px 24px;
+            background: #34a853;
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 25px;
             cursor: pointer;
             z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
         }
         
-        /* استایل چت باکس داخلی */
-        #chat {
-            margin-bottom: 70px;
+        /* ریسپانسیو برای موبایل */
+        @media (max-width: 768px) {
+            #messageInput {
+                width: calc(100% - 80px);
+            }
+            
+            #cbox-toggle {
+                left: 10px;
+                bottom: 10px;
+                padding: 10px 15px;
+                font-size: 14px;
+            }
         }
     </style>
 </head>
 <body>
     <div id="chat"></div>
-    <input id="messageInput" type="text" placeholder="پیام بنویس...">
-    <button onclick="sendMessage()">ارسال</button>
+    
+    <div style="position: fixed; bottom: 0; left: 0; right: 0; background: #fff; padding: 10px; box-shadow: 0 -2px 5px rgba(0,0,0,0.1);">
+        <input id="messageInput" type="text" placeholder="پیام خود را بنویسید..." autocomplete="off">
+        <button onclick="sendMessage()">ارسال</button>
+    </div>
 
     <!-- دکمه CBox.ws -->
     <button id="cbox-toggle">چت عمومی (CBox)</button>
@@ -37,19 +95,41 @@
     <!-- اسکریپت CBox.ws -->
     <script>
         window['CboxReady'] = function (Cbox) {
-            Cbox('button', '5-956163-k2jrn5');
+            Cbox('button', '5-956163-k2jrn5', {
+                buttonStyle: {
+                    position: 'fixed',
+                    right: '20px',
+                    bottom: '20px',
+                    zIndex: '1001'
+                }
+            });
         };
     </script>
     <script src="https://static.cbox.ws/embed/2.js" async></script>
 
-    <!-- منطق نمایش/مخفی کردن CBox -->
+    <!-- منطق پیشرفته نمایش/مخفی کردن CBox -->
     <script>
-        document.getElementById('cbox-toggle').addEventListener('click', function() {
-            const cboxIframe = document.querySelector('#cbox-div iframe');
-            if (cboxIframe) {
-                cboxIframe.style.display = cboxIframe.style.display === 'none' ? 'block' : 'none';
-                this.textContent = cboxIframe.style.display === 'none' ? 'چت عمومی (CBox)' : 'بستن چت';
-            }
+        document.addEventListener('DOMContentLoaded', function() {
+            const cboxToggle = document.getElementById('cbox-toggle');
+            
+            cboxToggle.addEventListener('click', function() {
+                const cboxIframe = document.querySelector('#cbox-div iframe');
+                if (cboxIframe) {
+                    const isHidden = cboxIframe.style.display === 'none';
+                    cboxIframe.style.display = isHidden ? 'block' : 'none';
+                    this.textContent = isHidden ? 'بستن چت عمومی' : 'چت عمومی (CBox)';
+                    
+                    // افزودن انیمیشن
+                    cboxIframe.style.transition = 'opacity 0.3s';
+                    cboxIframe.style.opacity = isHidden ? '0' : '1';
+                    setTimeout(() => {
+                        cboxIframe.style.opacity = '1';
+                    }, 10);
+                }
+            });
+            
+            // فوکوس خودکار روی اینپوت پیام
+            document.getElementById('messageInput').focus();
         });
     </script>
 </body>
