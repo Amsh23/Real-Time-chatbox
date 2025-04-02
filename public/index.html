@@ -65,6 +65,50 @@
             z-index: 1000;
             box-shadow: 0 2px 10px rgba(0,0,0,0.2);
         }
+
+        /* استایل‌های پیام‌ها */
+        .message {
+            margin: 10px 0;
+            padding: 12px;
+            border-radius: 15px;
+            max-width: 80%;
+            word-wrap: break-word;
+        }
+
+        .my-message {
+            background-color: #dcf8c6;
+            margin-left: auto;
+            margin-right: 0;
+            border-bottom-right-radius: 0;
+        }
+
+        .other-message {
+            background-color: #ffffff;
+            margin-right: auto;
+            margin-left: 0;
+            border-bottom-left-radius: 0;
+            box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+        }
+
+        .system-message {
+            background-color: #f1f1f1;
+            margin: 10px auto;
+            text-align: center;
+            font-size: 0.9em;
+            color: #666;
+            width: 100%;
+        }
+
+        .message-time {
+            font-size: 0.7em;
+            color: #999;
+            margin-top: 5px;
+            text-align: left;
+        }
+
+        .my-message .message-time {
+            text-align: right;
+        }
         
         /* ریسپانسیو برای موبایل */
         @media (max-width: 768px) {
@@ -77,6 +121,10 @@
                 bottom: 10px;
                 padding: 10px 15px;
                 font-size: 14px;
+            }
+
+            .message {
+                max-width: 90%;
             }
         }
     </style>
