@@ -24,6 +24,38 @@ const elements = {
     clearPreview: document.getElementById('clear-preview')
 };
 
+// نصب openpgp.js در پروژه
+// npm install openpgp
+
+import * as openpgp from 'openpgp';
+
+// کلید عمومی و خصوصی برای رمزنگاری
+let publicKey = ''; // کلید عمومی ادمین یا گیرنده
+let privateKey = ''; // کلید خصوصی کاربر
+let passphrase = ''; // رمز عبور کلید خصوصی
+
+async function encryptMessage(message) {
+    const encrypted = await openpgp.encrypt({
+        message: await openpgp.createMessage({ text: message }),
+        encryptionKeys: await openpgp.readKey({ armoredKey: publicKey })
+    });
+    return encrypted;
+}
+
+async function decryptMessage(encryptedMessage) {
+    const privateKeyObj = await openpgp.decryptKey({
+        privateKey: await openpgp.readPrivateKey({ armoredKey: privateKey }),
+        passphrase
+    });
+
+    const decrypted = await openpgp.decrypt({
+        message: await openpgp.readMessage({ armoredMessage: encryptedMessage }),
+        decryptionKeys: privateKeyObj
+    });
+
+    return decrypted.data;
+}
+
 // مدیریت کاربران
 elements.saveUsernameBtn.addEventListener('click', () => {
     const username = elements.usernameInput.value.trim();
@@ -172,7 +204,6 @@ function updatePreviews() {
 function clearAttachments() {
     attachments = [];
     updatePreviews();
-    showToast('همه فایل‌ها حذف شدند');
 }
 
 // ارسال پیام
@@ -187,24 +218,27 @@ async function sendMessage() {
         showToast('لطفاً پیام یا فایل وارد کنید', 'error');
         return;
     }
-    
-    const uploadedFiles = [];
-    for (const file of attachments) {
-        const result = await uploadFile(file);
-        if (result) {
-            uploadedFiles.push(result);
-        } else {
-            return;
-        }
-    }
-    
+
+    const tempMessageId = `temp-${Date.now()}`;
+    displayMessage({ id: tempMessageId, text, username: currentUsername, timestamp: Date.now() }, true);
+
+    const encryptedText = await encryptMessage(text);
+
     const messageData = {
-        text,
+        text: encryptedText,
         groupId: currentGroup || null,
-        attachments: uploadedFiles
+        attachments: []
     };
-    
-    socket.emit('send-message', messageData);
+
+    socket.emit('send-message', messageData, (response) => {
+        if (response.success) {
+            document.querySelector(`.message[data-id="${tempMessageId}"]`).remove();
+            displayMessage(response.message, true);
+        } else {
+            showToast('خطا در ارسال پیام', 'error');
+        }
+    });
+
     elements.messageInput.value = '';
     clearAttachments();
 }
@@ -320,7 +354,7 @@ socket.on('group-created', ({ groupId, inviteLink }) => {
     elements.groupName.textContent = `گروه: ${groupId}`;
     elements.inviteCode.textContent = inviteLink;
     elements.chatTitle.textContent = `گروه: ${groupId}`;
-    showToast('گروه با موفقیت ایجاد شد');
+    showToast('گروه با موفقیت ایجاد شد و شما به آن اضافه شدید');
 });
 
 socket.on('group-joined', (group) => {
@@ -347,6 +381,13 @@ socket.on('new-message', (message) => {
 
 socket.on('group-error', (error) => {
     showToast(error, 'error');
+});
+
+socket.on('user-status', ({ userId, status }) => {
+    const userElement = document.querySelector(`.user[data-id="${userId}"]`);
+    if (userElement) {
+        userElement.classList.toggle('online', status === 'online');
+    }
 });
 
 // پخش صدای نوتیفیکیشن
@@ -376,4 +417,80 @@ window.addEventListener('load', () => {
             });
         }
     }
+});
+
+const showGroupsBtn = document.createElement('button');
+showGroupsBtn.textContent = 'نمایش گروه‌ها';
+showGroupsBtn.addEventListener('click', async () => {
+    const response = await fetch('/groups');
+    const groups = await response.json();
+    let groupList = 'لیست گروه‌ها:\n';
+    groups.forEach(group => {
+        groupList += `- ${group.name} (اعضا: ${group.members})\n`;
+    });
+    alert(groupList);
+});
+document.querySelector('.group-section').appendChild(showGroupsBtn);
+
+const showUsersBtn = document.createElement('button');
+showUsersBtn.textContent = 'نمایش کاربران آنلاین';
+showUsersBtn.addEventListener('click', async () => {
+    const response = await fetch('/users');
+    const users = await response.json();
+    let userList = 'لیست کاربران آنلاین:\n';
+    users.forEach(user => {
+        userList += `- ${user.username || 'ناشناس'}\n`;
+    });
+    alert(userList);
+});
+document.querySelector('.profile-section').appendChild(showUsersBtn);
+
+socket.emit('get-role', (role) => {
+    console.log(`نقش شما: ${role}`);
+    if (role === 'admin') {
+        // نمایش قابلیت‌های ادمین
+    } else if (role === 'moderator') {
+        // نمایش قابلیت‌های مدیر
+    }
+});
+
+async function generateInvite(role) {
+    const response = await fetch('/generate-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role })
+    });
+
+    const data = await response.json();
+    if (data.inviteLink) {
+        navigator.clipboard.writeText(data.inviteLink);
+        showToast('لینک دعوت کپی شد');
+    } else {
+        showToast('خطا در ایجاد لینک دعوت', 'error');
+    }
+}
+
+// استفاده از لینک دعوت
+const token = new URLSearchParams(window.location.search).get('token');
+if (token) {
+    fetch('/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(`شما به‌عنوان ${data.role} وارد شدید`);
+        } else {
+            showToast('توکن نامعتبر است', 'error');
+        }
+    });
+}
+
+document.getElementById('toggle-theme').addEventListener('click', () => {
+    document.body.classList.toggle('light-mode');
+    const icon = document.querySelector('#toggle-theme i');
+    icon.classList.toggle('fa-moon');
+    icon.classList.toggle('fa-sun');
 });
