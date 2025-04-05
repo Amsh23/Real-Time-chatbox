@@ -5,6 +5,7 @@ const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
+const sanitizeHtml = require('sanitize-html');
 
 const PORT = process.env.PORT || 3000; // اضافه کردن این خط
 
@@ -19,14 +20,14 @@ const io = socketIo(server, {
 
 // تنظیمات ذخیره‌سازی فایل‌ها
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
+  destination: (_, __, cb) => {
     const uploadDir = path.join(__dirname, 'public', 'uploads');
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
     cb(null, uploadDir);
   },
-  filename: (req, file, cb) => {
+  filename: (_, file, cb) => {
     cb(null, uuidv4() + path.extname(file.originalname));
   }
 });
@@ -34,7 +35,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
-  fileFilter: (req, file, cb) => {
+  fileFilter: (_, file, cb) => {
     const filetypes = /jpeg|jpg|png|gif|mp4|webm|pdf|docx|xlsx/;
     const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = filetypes.test(file.mimetype);
@@ -47,7 +48,7 @@ const upload = multer({
 });
 
 // مسیر آپلود فایل
-app.post('/upload', (req, res, next) => {
+app.post('/upload', (req, res) => {
     upload.single('file')(req, res, (err) => {
         if (err) {
             return res.status(400).json({ error: err.message });
@@ -82,18 +83,18 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
 // مسیر ریشه
-app.get('/', (req, res) => {
+app.get('/', (_, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // مدیریت سوکت‌ها
 const users = new Map();
 const groups = new Map();
-const messages = [];
+// Removed unused variable 'messages'
 const userGroups = new Map(); // Reverse mapping of users to groups
 const groupMessages = new Map();
 const roles = new Map(); // نقش کاربران
-const inviteTokens = new Map(); // ذخیره توکن‌های دعوت
+// Removed unused variable 'inviteTokens'
 
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
@@ -184,7 +185,7 @@ io.on('connection', (socket) => {
     if (!group) {
         return callback({ success: false, error: 'Group does not exist' });
     }
-
+    // sanitizeHtml is already imported at the top of the file
     const sanitizeHtml = require('sanitize-html');
 
     const newMessage = {
@@ -260,7 +261,7 @@ io.on('connection', (socket) => {
   });
 });
 
-app.get('/groups', (req, res) => {
+app.get('/groups', (_, res) => {
     const groupList = Array.from(groups.entries()).map(([groupId, group]) => ({
         groupId,
         name: sanitizeGroupName(group.name),
@@ -277,7 +278,7 @@ function sanitizeGroupName(name) {
     });
 }
 
-app.get('/users', (req, res) => {
+app.get('/users', (_, res) => {
     const userList = Array.from(users.entries()).map(([socketId, username]) => ({
         socketId,
         username
@@ -310,11 +311,11 @@ app.post('/join', (req, res) => {
     }
 
     // Ensure the userId is valid and not already assigned a role
-    if (roles.has(userId)) {
+    if (roles && roles.has(userId)) {
         return res.status(400).json({ error: 'User already has a role assigned' });
     }
 
-    roles.set(userId, role); // Assign user role
+    if (roles) roles.set(userId, role); // Assign user role
 
     inviteTokens.delete(token); // توکن یک‌بارمصرف است
     res.json({ success: true, message: 'User joined successfully', role });
