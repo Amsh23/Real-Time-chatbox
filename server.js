@@ -81,6 +81,11 @@ function getFileType(mimetype) {
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
+// مسیر ریشه
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // مدیریت سوکت‌ها
 const users = new Map();
 const groups = new Map();
