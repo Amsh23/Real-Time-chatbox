@@ -6,17 +6,30 @@
     <title>چت پیشرفته | طرح بنفش</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        /* حالت تاریک */
         :root {
-            --primary: #7e57c2;
-            --primary-dark: #5e35b1;
-            --primary-light: #b39ddb;
+            --primary: #4caf50;
+            --primary-dark: #388e3c;
+            --primary-light: #81c784;
             --secondary: #ff9800;
             --dark: #121212;
             --dark-2: #1e1e1e;
             --dark-3: #2d2d2d;
             --light: #e0e0e0;
             --light-2: #b0b0b0;
-            --danger: #ff5252;
+            --danger: #f44336;
+        }
+
+        /* حالت روشن */
+        body.light-mode {
+            --dark: #ffffff;
+            --dark-2: #f5f5f5;
+            --dark-3: #e0e0e0;
+            --light: #121212;
+            --light-2: #424242;
+            --primary: #1976d2;
+            --primary-dark: #1565c0;
+            --primary-light: #64b5f6;
         }
 
         * {
@@ -120,7 +133,7 @@
             padding: 12px;
             margin-bottom: 10px;
             background-color: var(--dark-3);
-            color: var(--light);
+            color: var (--light);
             border: none;
             border-radius: 8px;
             cursor: pointer;
@@ -500,6 +513,16 @@
                 max-height: 50vh;
             }
         }
+
+        .user.online::before {
+            content: '';
+            width: 10px;
+            height: 10px;
+            background-color: var(--primary);
+            border-radius: 50%;
+            display: inline-block;
+            margin-left: 5px;
+        }
     </style>
 </head>
 <body>
@@ -555,7 +578,11 @@
         </div>
     </div>
 
+    <div class="theme-toggle">
+        <button id="toggle-theme"><i class="fas fa-moon"></i></button>
+    </div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script src="/script.js"></script>
 </body>
-                            </html>
+</html>
