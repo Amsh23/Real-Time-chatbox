@@ -93,7 +93,7 @@ elements.joinGroupBtn.addEventListener('click', () => {
 });
 
 elements.copyInviteBtn.addEventListener('click', () => {
-    const inviteLink = `${window.location.host}?join=${currentGroup}`;
+    const inviteLink = `${window.location.origin}?join=${currentGroup}`;
     navigator.clipboard.writeText(inviteLink)
         .then(() => showToast('لینک دعوت با موفقیت کپی شد'))
         .catch(() => showToast('خطا در کپی لینک', 'error'));
