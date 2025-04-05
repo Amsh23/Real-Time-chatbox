@@ -60,7 +60,13 @@ app.post('/upload', (req, res, next) => {
             size: req.file.size,
             originalName: req.file.originalname
         });
-    });
+        });
+});
+
+server.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+    console.log(`سرور در حال اجرا روی پورت ${PORT}`);
+    console.log(`آدرس دسترسی: http://localhost:${PORT}`);
 });
 
 function getFileType(mimetype) {
@@ -172,6 +178,7 @@ io.on('connection', (socket) => {
     if (!group) {
         return callback({ success: false, error: 'Group does not exist' });
     }
+
     const sanitizeHtml = require('sanitize-html');
 
     const newMessage = {
@@ -185,108 +192,93 @@ io.on('connection', (socket) => {
         timestamp: Date.now(),
         attachments: message.attachments || []
     };
-        sender: socket.id,
-        groupId: message.groupId,
-        timestamp: Date.now(),
-        attachments: message.attachments || []
-    };
 
     if (!groupMessages.has(message.groupId)) {
         groupMessages.set(message.groupId, []);
     }
-  socket.on('set-role', ({ userId, role, groupId }) => {
-    const group = groups.get(groupId);
+    groupMessages.get(message.groupId).push(newMessage);
 
-    if (!group) {
-      return socket.emit('error', 'گروه وجود ندارد');
-    }
+    io.to(`group_${message.groupId}`).emit('new-message', newMessage);
+    callback({ success: true, message: newMessage });
+});
 
-    if (!group.members.includes(socket.id)) {
-      return socket.emit('error', 'شما عضو این گروه نیستید');
-    }
+    socket.on('set-role', ({ userId, role, groupId }) => {
+        const group = groups.get(groupId);
 
-    if (group.admin !== socket.id) {
-      return socket.emit('error', 'شما دسترسی لازم برای تغییر نقش‌ها را ندارید');
-    }
+        if (!group) {
+            return socket.emit('error', 'گروه وجود ندارد');
+        }
 
-    const validRoles = ['user', 'moderator', 'admin']; // نقش‌های معتبر
-    if (!validRoles.includes(role)) {
-      return socket.emit('error', 'نقش نامعتبر است');
-    }
+        if (!group.members.includes(socket.id)) {
+            return socket.emit('error', 'شما عضو این گروه نیستید');
+        }
 
-    roles.set(userId, role);
-    socket.emit('role-updated', { userId, role });
-  });
-      roles.set(userId, role);
-      socket.emit('role-updated', { userId, role });
-    } else {
-      socket.emit('error', 'شما دسترسی لازم برای تغییر نقش‌ها را ندارید');
-    }
-  });
+        if (group.admin !== socket.id) {
+            return socket.emit('error', 'شما دسترسی لازم برای تغییر نقش‌ها را ندارید');
+        }
 
-  socket.on('get-role', (callback) => {
-    callback(roles.get(socket.id));
-  });
+        const validRoles = ['user', 'moderator', 'admin']; // نقش‌های معتبر
+        if (!validRoles.includes(role)) {
+            return socket.emit('error', 'نقش نامعتبر است');
+        }
 
-  socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
-    socket.broadcast.emit('user-status', { userId: socket.id, status: 'offline' });
+        roles.set(userId, role);
+        socket.emit('role-updated', { userId, role });
+    });
 
-    // Remove user from users map
-    users.delete(socket.id);
-    io.emit('online-count', users.size);
-  const userGroupIds = userGroups.get(socket.id) || [];
-  userGroupIds.forEach(groupId => {
-      const group = groups.get(groupId);
-      if (group) {
-          group.members = group.members.filter(member => member !== socket.id);
-          io.to(`group_${groupId}`).emit('user-left', { userId: socket.id, groupId });
-      }
-  });
-  userGroups.delete(socket.id);
-      if (memberIndex !== -1) {
-  // Removed the 'online-count' event handler as it contained client-side logic.
-        io.to(`group_${groupId}`).emit('user-left', { userId: socket.id, groupId });
-      }
+    socket.on('get-role', (callback) => {
+        callback(roles.get(socket.id));
+    });
+
+    socket.on('disconnect', () => {
+        console.log('User disconnected:', socket.id);
+        socket.broadcast.emit('user-status', { userId: socket.id, status: 'offline' });
+
+        // Remove user from users map
+        users.delete(socket.id);
+        io.emit('online-count', users.size);
+
+        const userGroupIds = userGroups.get(socket.id) || [];
+        userGroupIds.forEach(groupId => {
+            const group = groups.get(groupId);
+            if (group) {
+                group.members = group.members.filter(member => member !== socket.id);
+                io.to(`group_${groupId}`).emit('user-left', { userId: socket.id, groupId });
+            }
+        });
+        userGroups.delete(socket.id);
     });
 
     // Update online count
     io.emit('online-count', users.size);
+  });
+});
+
 app.get('/groups', (req, res) => {
-  const groupList = Array.from(groups.entries()).map(([groupId, group]) => ({
-    groupId,
-    name: sanitizeGroupName(group.name),
-    members: group.members.length
-  }));
-  res.json(groupList);
+    const groupList = Array.from(groups.entries()).map(([groupId, group]) => ({
+        groupId,
+        name: sanitizeGroupName(group.name),
+        members: group.members.length
+    }));
+    res.json(groupList);
 });
 
 function sanitizeGroupName(name) {
-  const sanitizeHtml = require('sanitize-html');
-  return sanitizeHtml(name, {
-    allowedTags: [],
-    allowedAttributes: {}
-  });
+    const sanitizeHtml = require('sanitize-html');
+    return sanitizeHtml(name, {
+        allowedTags: [],
+        allowedAttributes: {}
+    });
 }
-  const groupList = Array.from(groups.entries()).map(([groupId, group]) => ({
-    groupId,
-    name: group.name,
-    members: group.members.length
-  }));
-  res.json(groupList);
-});
 
 app.get('/users', (req, res) => {
-  const userList = Array.from(users.entries()).map(([socketId, username]) => ({
-    socketId,
-    username
-  }));
-    if (!req.body || typeof req.body.role !== 'string') {
-        return res.status(400).json({ error: 'ساختار درخواست نامعتبر است' });
-    }
+    const userList = Array.from(users.entries()).map(([socketId, username]) => ({
+        socketId,
+        username
+    }));
+    res.json(userList);
+});
 
-    const { role } = req.body; // نقش موردنظر برای دعوت
-    if (!['user', 'moderator'].includes(role)) {
 app.post('/join', (req, res) => {
     const { token, userId } = req.body;
 
@@ -321,28 +313,15 @@ app.post('/join', (req, res) => {
     inviteTokens.delete(token); // توکن یک‌بارمصرف است
     res.json({ success: true, message: 'User joined successfully', role });
 });
-        return res.status(404).json({ error: 'User ID not found' });
-    }
-
-    roles.set(userId, role); // Assign user role
-
-    inviteTokens.delete(token); // توکن یک‌بارمصرف است
-    res.json({ success: true, message: 'User joined successfully', role });
-});
 
 // Generate invite code function
 function generateInviteCode() {
-  const crypto = require('crypto');
-  return crypto.randomBytes(3).toString('hex').toUpperCase(); // Generates a 6-character secure code
+    const crypto = require('crypto');
+    return crypto.randomBytes(3).toString('hex').toUpperCase(); // Generates a 6-character secure code
 }
 
-function generateInviteCode() {
-  return Math.random().toString(36).substr(2, 6).toUpperCase();
-}
-// Removed duplicate generateInviteCode function definition
 server.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
     console.log(`سرور در حال اجرا روی پورت ${PORT}`);
     console.log(`آدرس دسترسی: http://localhost:${PORT}`);
-    console.log(`سرور در حال اجرا روی پورت ${PORT} (Server is running on port ${PORT})`);
-    console.log(`آدرس دسترسی: http://localhost:${PORT} (Access URL: http://localhost:${PORT})`);
+});
