@@ -18,7 +18,6 @@
             --light: #e0e0e0; /* متن روشن */
             --light-2: #b0b0b0; /* متن روشن‌تر */
             --danger: #e53935; /* قرمز */
-        }
 
         /* حالت روشن */
         body.light-mode {
@@ -40,20 +39,19 @@
         }
 
         body {
+            /* Set default dark mode colors for the page */
             background-color: var(--dark);
             color: var(--light);
             min-height: 100vh;
             padding: 20px;
         }
-
         .container {
             max-width: 1200px;
             margin: 0 auto;
             display: flex;
             gap: 20px;
-            height: calc(100vh - 40px);
+            min-height: calc(100vh - 40px);
         }
-
         /* سایدبار */
         .sidebar {
             width: 300px;
@@ -133,7 +131,7 @@
             padding: 12px;
             margin-bottom: 10px;
             background-color: var(--dark-3);
-            color: var (--light);
+            color: var(--light);
             border: none;
             border-radius: 8px;
             cursor: pointer;
@@ -477,7 +475,6 @@
             padding: 12px 20px;
             border-radius: 8px;
             color: white;
-            font-family: 'Vazirmatn', sans-serif;
             transform: translateY(100px);
             opacity: 0;
             transition: all 0.3s ease;
@@ -485,6 +482,8 @@
         }
         
         .toast.show {
+            top: 0; /* Fallback for browsers without transform */
+            visibility: visible; /* Fallback for browsers without opacity */
             transform: translateY(0);
             opacity: 1;
         }
@@ -498,7 +497,7 @@
         }
 
         /* نسخه موبایل */
-        @media (max-width: 768px) {
+        /* نسخه موبایل: تنظیمات برای صفحه‌نمایش‌های کوچک‌تر از 768px جهت بهبود تجربه کاربری و نمایش مناسب */
             .container {
                 flex-direction: column;
                 height: auto;
@@ -514,7 +513,7 @@
             }
         }
 
-        .user.online::before {
+        .user-status.online::before {
             content: '';
             width: 10px;
             height: 10px;
@@ -567,7 +566,10 @@
                 <div class="input-area">
                     <button id="attach-btn" title="ضمیمه کردن فایل">
                         <i class="fas fa-paperclip"></i>
-                        <input type="file" id="file-input" multiple accept="image/*,video/*,.gif,.pdf">
+                        <label for="file-input" id="attach-btn" title="ضمیمه کردن فایل">
+                            <i class="fas fa-paperclip"></i>
+                        </label>
+                        <input type="file" id="file-input" multiple accept="image/*,video/*,.gif,.pdf" style="display: none;">
                     </button>
                     
                     <input id="message-input" placeholder="پیام خود را بنویسید...">
@@ -579,8 +581,8 @@
     </div>
 
     <div class="theme-toggle">
-        <button id="toggle-theme"><i class="fas fa-moon"></i></button>
-    </div>
+    <script src="/socket.io/socket.io.js" defer></script>
+    <script src="/script.js" defer></script>
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="/script.js"></script>
