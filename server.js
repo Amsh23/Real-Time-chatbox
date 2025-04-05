@@ -8,7 +8,12 @@ const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
+const io = socketIo(server, {
+    cors: {
+        origin: "*", // اجازه دسترسی از همه دامنه‌ها
+        methods: ["GET", "POST"]
+    }
+});
 
 // تنظیمات ذخیره‌سازی فایل‌ها
 const storage = multer.diskStorage({
@@ -35,22 +40,22 @@ const upload = multer({
     if (extname && mimetype) {
       return cb(null, true);
     }
-    cb(new Error('فقط فایل‌های تصویر، ویدئو و PDF مجاز هستند!'));
+    cb(new Error('Only image, video, and PDF files are allowed!'));
   }
 });
 
 // مسیر آپلود فایل
 app.post('/upload', upload.single('file'), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'هیچ فایلی آپلود نشد' });
-  }
-  
-  res.json({
-    url: `/uploads/${req.file.filename}`,
-    type: getFileType(req.file.mimetype),
-    size: req.file.size,
-    originalName: req.file.originalname
-  });
+    if (!req.file) {
+        return res.status(400).json({ error: 'هیچ فایلی آپلود نشد' });
+    }
+    
+    res.json({
+        url: `/uploads/${req.file.filename}`,
+        type: getFileType(req.file.mimetype),
+        size: req.file.size,
+        originalName: req.file.originalname
+    });
 });
 
 function getFileType(mimetype) {
@@ -79,7 +84,7 @@ io.on('connection', (socket) => {
   socket.broadcast.emit('user-status', { userId: socket.id, status: 'online' });
 
   // تنظیم نقش پیش‌فرض
-  roles.set(socket.id, 'guest'); // نقش پیش‌فرض: مهمان
+  roles.set(socket.id, 'guest'); // Default role: guest
 
   socket.on('set-username', (username) => {
     users.set(socket.id, username);
@@ -141,7 +146,16 @@ io.on('connection', (socket) => {
 
   socket.on('send-message', (message, callback) => {
     if (!message.text || !message.groupId) {
-        return callback({ success: false });
+        return callback({ success: false, error: 'Message text or groupId is missing' });
+    }
+
+    const group = groups.get(message.groupId);
+    if (!group) {
+        return callback({ success: false, error: 'Group does not exist' });
+    }
+
+    if (!group.members.includes(socket.id)) {
+        return callback({ success: false, error: 'You are not a member of this group' });
     }
 
     const newMessage = {
@@ -164,6 +178,10 @@ io.on('connection', (socket) => {
 
   socket.on('set-role', ({ userId, role }) => {
     if (roles.get(socket.id) === 'admin') { // فقط ادمین می‌تواند نقش‌ها را تغییر دهد
+      const validRoles = ['user', 'moderator', 'admin']; // نقش‌های معتبر
+      if (!validRoles.includes(role)) {
+        return socket.emit('error', 'نقش نامعتبر است');
+      }
       roles.set(userId, role);
       socket.emit('role-updated', { userId, role });
     } else {
@@ -178,9 +196,31 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
     socket.broadcast.emit('user-status', { userId: socket.id, status: 'offline' });
+
+    // Remove user from users map
     users.delete(socket.id);
-    roles.delete(socket.id);
     io.emit('online-count', users.size);
+
+    // Remove user from roles map
+    roles.delete(socket.id);
+
+    // Remove user from all groups they were part of
+    groups.forEach((group, groupId) => {
+      const memberIndex = group.members.indexOf(socket.id);
+      if (memberIndex !== -1) {
+        group.members.splice(memberIndex, 1);
+
+        // Notify group members about the user leaving
+        io.to(`group_${groupId}`).emit('user-left', { userId: socket.id, groupId });
+      }
+    });
+
+    // Update online count
+    io.emit('online-count', users.size);
+  });
+
+  socket.on('online-count', (count) => {
+    elements.onlineCount.textContent = count;
   });
 });
 
@@ -198,11 +238,14 @@ app.get('/users', (req, res) => {
     socketId,
     username
   }));
-  res.json(userList);
-});
+    if (!req.body || typeof req.body.role !== 'string') {
+        return res.status(400).json({ error: 'ساختار درخواست نامعتبر است' });
+    }
 
-app.post('/generate-invite', (req, res) => {
     const { role } = req.body; // نقش موردنظر برای دعوت
+    if (!['user', 'moderator'].includes(role)) {
+        return res.status(400).json({ error: 'نقش نامعتبر است' });
+    }
     if (!['user', 'moderator'].includes(role)) {
         return res.status(400).json({ error: 'نقش نامعتبر است' });
     }
@@ -217,20 +260,26 @@ app.post('/join', (req, res) => {
     const role = inviteTokens.get(token);
 
     if (!role) {
-        return res.status(400).json({ error: 'توکن نامعتبر است' });
+        return res.status(400).json({ error: 'Invalid or expired invite token' });
     }
+    const userId = req.body.userId; // Expecting userId to be sent in the request body
+    if (!userId) {
+        return res.status(400).json({ error: 'User ID not provided' });
+    }
+    roles.set(userId, role); // Assign user role
 
     inviteTokens.delete(token); // توکن یک‌بارمصرف است
-    roles.set(req.socket.id, role); // تنظیم نقش کاربر
-    res.json({ success: true, role });
-});
+function generateInviteCode() {
+  const crypto = require('crypto');
+  return crypto.randomBytes(3).toString('hex').toUpperCase(); // Generates a 6-character secure code
+}
 
 function generateInviteCode() {
   return Math.random().toString(36).substr(2, 6).toUpperCase();
 }
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
   console.log(`سرور در حال اجرا روی پورت ${PORT}`);
   console.log(`آدرس دسترسی: http://localhost:${PORT}`);
 });
