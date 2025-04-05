@@ -34,17 +34,36 @@ let publicKey = ''; // کلید عمومی ادمین یا گیرنده
 let privateKey = ''; // کلید خصوصی کاربر
 let passphrase = ''; // رمز عبور کلید خصوصی
 
+function isValidPrivateKey(key) {
+    try {
+        return openpgp.readPrivateKey({ armoredKey: key }) !== null;
+    } catch {
+        return false;
+    }
+}
+
+async function validateAndReadKey(key) {
+    try {
+        return await openpgp.readKey({ armoredKey: key });
+    } catch (error) {
+        throw new Error('Invalid public key format');
+    }
+}
+
 async function encryptMessage(message) {
+    if (!message || message.trim() === '') {
+        return ''; // Skip encryption for empty messages
+    }
     const encrypted = await openpgp.encrypt({
-        message: await openpgp.createMessage({ text: message }),
-        encryptionKeys: await openpgp.readKey({ armoredKey: publicKey })
+        privateKey: privateKey && isValidPrivateKey(privateKey) ? await openpgp.readPrivateKey({ armoredKey: privateKey }) : (() => { throw new Error('Private key is not set or invalid'); })(),
+        encryptionKeys: publicKey ? await validateAndReadKey(publicKey) : (() => { throw new Error('Public key is not set'); })()
     });
     return encrypted;
 }
 
 async function decryptMessage(encryptedMessage) {
     const privateKeyObj = await openpgp.decryptKey({
-        privateKey: await openpgp.readPrivateKey({ armoredKey: privateKey }),
+        privateKey: privateKey ? await openpgp.readPrivateKey({ armoredKey: privateKey }) : (() => { throw new Error('Private key is not set'); })(),
         passphrase
     });
 
@@ -102,51 +121,37 @@ elements.copyInviteBtn.addEventListener('click', () => {
 // مدیریت فایل‌ها
 elements.attachBtn.addEventListener('click', () => elements.fileInput.click());
 
+// Removed the incomplete duplicate definition of handleFileSelect
+
 elements.fileInput.addEventListener('change', handleFileSelect);
-elements.clearPreview.addEventListener('click', clearAttachments);
 
 function handleFileSelect(e) {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
-    
-    if (attachments.length + files.length > 5) {
-        showToast('حداکثر 5 فایل می‌توانید ارسال کنید', 'error');
-        return;
-    }
-    
-    elements.previewArea.style.display = 'block';
-    
-    files.forEach(file => {
+
+    files.forEach((file) => {
         if (file.size > 10 * 1024 * 1024) {
-            showToast(`فایل ${file.name} بزرگتر از حد مجاز است`, 'error');
-            return;
+            showToast(`فایل ${file.name} بزرگتر از حد مجاز است و ارسال نمی‌شود`, 'error');
+            return; // Skip this file and continue with the next one
         }
-        
+
         const preview = createFilePreview(file);
         elements.filePreviews.appendChild(preview);
         attachments.push(file);
     });
-    
-    document.querySelectorAll('.remove-file').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const index = parseInt(e.target.closest('button').dataset.index);
-            attachments.splice(index, 1);
-            updatePreviews();
-        });
-    });
 }
 
 function createFilePreview(file) {
-    const fileType = file.type.split('/')[0];
     const preview = document.createElement('div');
     preview.className = 'file-preview';
     
+    const fileType = file.type.split('/')[0];
     if (fileType === 'image') {
         preview.innerHTML = `
             <img src="${URL.createObjectURL(file)}" alt="${file.name}">
             <div class="file-info">
                 <span>${file.name}</span>
-                <button class="remove-file" data-index="${attachments.length}">
+                <button class="remove-file" data-index="${attachments.indexOf(file)}">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -196,18 +201,19 @@ function updatePreviews() {
     
     attachments.forEach((file, index) => {
         const preview = createFilePreview(file);
-        preview.querySelector('.remove-file').dataset.index = index;
+        const removeButton = preview.querySelector('.remove-file');
+        removeButton.dataset.index = index;
+        const handleRemove = () => {
+            attachments.splice(index, 1);
+            updatePreviews();
+        };
+
+        removeButton.removeEventListener('click', handleRemove); // Remove old listener
+        removeButton.addEventListener('click', handleRemove); // Add new listener
         elements.filePreviews.appendChild(preview);
     });
 }
 
-function clearAttachments() {
-    attachments = [];
-    updatePreviews();
-}
-
-// ارسال پیام
-elements.sendButton.addEventListener('click', sendMessage);
 elements.messageInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') sendMessage();
 });
@@ -252,11 +258,6 @@ async function uploadFile(file) {
             method: 'POST',
             body: formData
         });
-        
-        if (!response.ok) {
-            throw new Error('خطا در آپلود فایل');
-        }
-        
         return await response.json();
     } catch (error) {
         console.error('Upload error:', error);
@@ -264,46 +265,39 @@ async function uploadFile(file) {
         return null;
     }
 }
-
-// نمایش پیام‌ها
 function displayMessage(message, isMyMessage = false) {
     const messageElement = document.createElement('div');
     messageElement.className = `message ${isMyMessage ? 'my-message' : 'other-message'} ${message.groupId ? 'group-message' : ''}`;
     
     let attachmentsHTML = '';
-    if (message.attachments && message.attachments.length > 0) {
-        attachmentsHTML = '<div class="message-attachments">';
-        
-        message.attachments.forEach(attachment => {
-            if (attachment.type === 'image') {
-                attachmentsHTML += `
-                    <div class="attachment image">
-                        <img src="${attachment.url}" alt="تصویر">
-                    </div>
-                `;
-            } else if (attachment.type === 'video') {
-                attachmentsHTML += `
-                    <div class="attachment video">
-                        <video controls>
-                            <source src="${attachment.url}" type="video/mp4">
-                            مرورگر شما از ویدئو پشتیبانی نمی‌کند.
-                        </video>
-                    </div>
-                `;
-            } else {
-                attachmentsHTML += `
-                    <div class="attachment file">
-                        <a href="${attachment.url}" target="_blank" download="${attachment.originalName}">
-                            <i class="fas ${getFileIcon(attachment)}"></i>
-                            <span>${attachment.originalName}</span>
-                        </a>
-                    </div>
-                `;
-            }
-        });
-        
-        attachmentsHTML += '</div>';
-    }
+    message.attachments?.forEach((attachment) => {
+        const attachmentType = (attachment && attachment.type) ? attachment.type : 'unknown';
+        if (attachmentType === 'image') {
+            attachmentsHTML += `
+                <div class="attachment image">
+                    <img src="${attachment.url}" alt="تصویر">
+                </div>
+            `;
+        } else if (attachmentType === 'video') {
+            attachmentsHTML += `
+                <div class="attachment video">
+                    <video controls>
+                        <source src="${attachment.url}" type="video/mp4">
+                        مرورگر شما از ویدئو پشتیبانی نمی‌کند.
+                    </video>
+                </div>
+            `;
+        } else {
+            attachmentsHTML += `
+                <div class="attachment file">
+                    <a href="${attachment.url}" target="_blank" download="${attachment.originalName}">
+                        <i class="fas ${getFileIcon(attachment)}"></i>
+                        <span>${attachment.originalName}</span>
+                    </a>
+                </div>
+            `;
+        }
+    });
     
     messageElement.innerHTML = `
         <strong>${message.username || 'ناشناس'}</strong>
@@ -392,32 +386,31 @@ socket.on('user-status', ({ userId, status }) => {
 
 // پخش صدای نوتیفیکیشن
 function playNotificationSound() {
-    const audio = new Audio('data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU...');
+    const audio = new Audio('/sounds/notification.wav'); // Ensure the file exists in the specified path
     audio.volume = 0.2;
-    audio.play().catch(e => console.log('Cannot play sound:', e));
+    audio.play().catch(e => {
+        console.log('Cannot play sound:', e);
+        showToast('خطا در پخش صدای نوتیفیکیشن', 'error');
+    });
 }
 
-// بارگذاری اولیه
-window.addEventListener('load', () => {
-    const savedUsername = localStorage.getItem('username');
-    if (savedUsername) {
-        elements.usernameInput.value = savedUsername;
-        currentUsername = savedUsername;
-        socket.emit('set-username', savedUsername);
+const savedUsername = localStorage.getItem('username');
+if (savedUsername) {
+    currentUsername = savedUsername;
+    socket.emit('set-username', savedUsername);
+}
+
+const urlParams = new URLSearchParams(window.location.search);
+const joinGroup = urlParams.get('join');
+if (joinGroup) {
+    const inviteCode = prompt('لطفاً کد دعوت گروه را وارد کنید:');
+    if (inviteCode) {
+        socket.emit('join-group', { 
+            groupId: joinGroup.split(':')[0], 
+            inviteCode: joinGroup.split(':')[1] || inviteCode 
+        });
     }
-    
-    const urlParams = new URLSearchParams(window.location.search);
-    const joinGroup = urlParams.get('join');
-    if (joinGroup) {
-        const inviteCode = prompt('لطفاً کد دعوت گروه را وارد کنید:');
-        if (inviteCode) {
-            socket.emit('join-group', { 
-                groupId: joinGroup.split(':')[0], 
-                inviteCode: joinGroup.split(':')[1] || inviteCode 
-            });
-        }
-    }
-});
+}
 
 const showGroupsBtn = document.createElement('button');
 showGroupsBtn.textContent = 'نمایش گروه‌ها';
@@ -444,6 +437,16 @@ showUsersBtn.addEventListener('click', async () => {
     alert(userList);
 });
 document.querySelector('.profile-section').appendChild(showUsersBtn);
+
+// Supported roles and their implications:
+// - 'admin': Has full control over the application, including managing users and groups.
+// - 'moderator': Can moderate content and manage group activities but has limited administrative privileges.
+// - Other roles or undefined: Default user with basic access to chat functionalities.
+
+// Supported roles and their implications:
+// - 'admin': Has full control over the application, including managing users and groups.
+// - 'moderator': Can moderate content and manage group activities but has limited administrative privileges.
+// - Other roles or undefined: Default user with basic access to chat functionalities.
 
 socket.emit('get-role', (role) => {
     console.log(`نقش شما: ${role}`);
@@ -488,9 +491,25 @@ if (token) {
     });
 }
 
-document.getElementById('toggle-theme').addEventListener('click', () => {
-    document.body.classList.toggle('light-mode');
-    const icon = document.querySelector('#toggle-theme i');
-    icon.classList.toggle('fa-moon');
-    icon.classList.toggle('fa-sun');
-});
+let isLightMode = localStorage.getItem('theme') === 'light';
+
+function updateTheme() {
+    if (isLightMode) {
+        document.body.classList.add('light-mode');
+        document.querySelector('#toggle-theme i').classList.add('fa-sun');
+        document.querySelector('#toggle-theme i').classList.remove('fa-moon');
+    } else {
+        document.body.classList.remove('light-mode');
+        document.querySelector('#toggle-theme i').classList.add('fa-moon');
+        document.querySelector('#toggle-theme i').classList.remove('fa-sun');
+    }
+}
+
+function toggleTheme() {
+    isLightMode = !isLightMode;
+    localStorage.setItem('theme', isLightMode ? 'light' : 'dark');
+    updateTheme();
+}
+
+document.getElementById('toggle-theme').addEventListener('click', toggleTheme);
+updateTheme(); // Initialize theme on page load
