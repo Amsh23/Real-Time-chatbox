@@ -69,9 +69,17 @@ const users = new Map();
 const groups = new Map();
 const messages = [];
 const groupMessages = new Map();
+const roles = new Map(); // نقش کاربران
+const inviteTokens = new Map(); // ذخیره توکن‌های دعوت
 
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
+
+  // ارسال وضعیت آنلاین به همه کاربران
+  socket.broadcast.emit('user-status', { userId: socket.id, status: 'online' });
+
+  // تنظیم نقش پیش‌فرض
+  roles.set(socket.id, 'guest'); // نقش پیش‌فرض: مهمان
 
   socket.on('set-username', (username) => {
     users.set(socket.id, username);
@@ -81,18 +89,39 @@ io.on('connection', (socket) => {
   socket.on('create-group', (groupName) => {
     const groupId = uuidv4();
     const inviteCode = generateInviteCode();
-    
+
     groups.set(groupId, {
-      name: groupName,
-      admin: socket.id,
-      members: [socket.id],
-      inviteCode
+        name: groupName,
+        admin: socket.id,
+        members: [socket.id],
+        inviteCode
     });
 
+    // اضافه کردن کاربر به اتاق گروه
+    socket.join(`group_${groupId}`);
+
+    // ارسال اطلاعات گروه به کاربر
     socket.emit('group-created', { 
-      groupId, 
-      inviteLink: `${groupId}:${inviteCode}` 
+        groupId, 
+        inviteLink: `${socket.handshake.headers.origin}?join=${groupId}:${inviteCode}` // لینک کامل
     });
+
+    // ارسال پیام خوش‌آمدگویی به گروه
+    const welcomeMessage = {
+        id: Date.now(),
+        text: `گروه "${groupName}" با موفقیت ایجاد شد!`,
+        sender: 'system',
+        username: 'سیستم',
+        timestamp: new Date(),
+        attachments: []
+    };
+
+    if (!groupMessages.has(groupId)) {
+        groupMessages.set(groupId, []);
+    }
+    groupMessages.get(groupId).push(welcomeMessage);
+
+    io.to(`group_${groupId}`).emit('new-message', welcomeMessage);
   });
 
   socket.on('join-group', ({ groupId, inviteCode }) => {
@@ -113,32 +142,90 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('send-message', (message) => {
+  socket.on('send-message', (message, callback) => {
+    if (!message.text || !message.groupId) {
+        return callback({ success: false });
+    }
+
     const newMessage = {
-      id: Date.now(),
-      text: message.text,
-      sender: socket.id,
-      username: users.get(socket.id),
-      timestamp: new Date(),
-      attachments: message.attachments || []
+        id: uuidv4(),
+        text: message.text,
+        sender: socket.id,
+        groupId: message.groupId,
+        timestamp: Date.now(),
+        attachments: message.attachments || []
     };
 
-    if (message.groupId) {
-      if (!groupMessages.has(message.groupId)) {
+    if (!groupMessages.has(message.groupId)) {
         groupMessages.set(message.groupId, []);
-      }
-      groupMessages.get(message.groupId).push(newMessage);
-      io.to(`group_${message.groupId}`).emit('new-message', newMessage);
+    }
+    groupMessages.get(message.groupId).push(newMessage);
+
+    io.to(`group_${message.groupId}`).emit('new-message', newMessage);
+    callback({ success: true, message: newMessage });
+  });
+
+  socket.on('set-role', ({ userId, role }) => {
+    if (roles.get(socket.id) === 'admin') { // فقط ادمین می‌تواند نقش‌ها را تغییر دهد
+      roles.set(userId, role);
+      socket.emit('role-updated', { userId, role });
     } else {
-      messages.push(newMessage);
-      io.emit('new-message', newMessage);
+      socket.emit('error', 'شما دسترسی لازم برای تغییر نقش‌ها را ندارید');
     }
   });
 
+  socket.on('get-role', (callback) => {
+    callback(roles.get(socket.id));
+  });
+
   socket.on('disconnect', () => {
+    console.log('User disconnected:', socket.id);
+    socket.broadcast.emit('user-status', { userId: socket.id, status: 'offline' });
     users.delete(socket.id);
+    roles.delete(socket.id);
     io.emit('online-count', users.size);
   });
+});
+
+app.get('/groups', (req, res) => {
+  const groupList = Array.from(groups.entries()).map(([groupId, group]) => ({
+    groupId,
+    name: group.name,
+    members: group.members.length
+  }));
+  res.json(groupList);
+});
+
+app.get('/users', (req, res) => {
+  const userList = Array.from(users.entries()).map(([socketId, username]) => ({
+    socketId,
+    username
+  }));
+  res.json(userList);
+});
+
+app.post('/generate-invite', (req, res) => {
+    const { role } = req.body; // نقش موردنظر برای دعوت
+    if (!['user', 'moderator'].includes(role)) {
+        return res.status(400).json({ error: 'نقش نامعتبر است' });
+    }
+
+    const token = uuidv4();
+    inviteTokens.set(token, role);
+    res.json({ inviteLink: `${req.protocol}://${req.get('host')}/join?token=${token}` });
+});
+
+app.post('/join', (req, res) => {
+    const { token } = req.body;
+    const role = inviteTokens.get(token);
+
+    if (!role) {
+        return res.status(400).json({ error: 'توکن نامعتبر است' });
+    }
+
+    inviteTokens.delete(token); // توکن یک‌بارمصرف است
+    roles.set(req.socket.id, role); // تنظیم نقش کاربر
+    res.json({ success: true, role });
 });
 
 function generateInviteCode() {
