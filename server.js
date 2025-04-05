@@ -97,16 +97,13 @@ io.on('connection', (socket) => {
         inviteCode
     });
 
-    // اضافه کردن کاربر به اتاق گروه
     socket.join(`group_${groupId}`);
 
-    // ارسال اطلاعات گروه به کاربر
     socket.emit('group-created', { 
         groupId, 
-        inviteLink: `${socket.handshake.headers.origin}?join=${groupId}:${inviteCode}` // لینک کامل
+        inviteLink: `${socket.handshake.headers.origin}?join=${groupId}:${inviteCode}`
     });
 
-    // ارسال پیام خوش‌آمدگویی به گروه
     const welcomeMessage = {
         id: Date.now(),
         text: `گروه "${groupName}" با موفقیت ایجاد شد!`,
@@ -128,17 +125,17 @@ io.on('connection', (socket) => {
     const group = groups.get(groupId);
     
     if (group && group.inviteCode === inviteCode) {
-      group.members.push(socket.id);
-      socket.join(`group_${groupId}`);
-      
-      const messages = groupMessages.get(groupId) || [];
-      socket.emit('group-joined', {
-        groupId,
-        name: group.name,
-        messages: messages
-      });
+        group.members.push(socket.id);
+        socket.join(`group_${groupId}`);
+        
+        const messages = groupMessages.get(groupId) || [];
+        socket.emit('group-joined', {
+            groupId,
+            name: group.name,
+            messages: messages
+        });
     } else {
-      socket.emit('group-error', 'کد دعوت نامعتبر است');
+        socket.emit('group-error', 'کد دعوت نامعتبر است');
     }
   });
 
