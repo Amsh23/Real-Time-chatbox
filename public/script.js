@@ -228,10 +228,8 @@ async function sendMessage() {
     const tempMessageId = `temp-${Date.now()}`;
     displayMessage({ id: tempMessageId, text, username: currentUsername, timestamp: Date.now() }, true);
 
-    const encryptedText = await encryptMessage(text);
-
     const messageData = {
-        text: encryptedText,
+        text,
         groupId: currentGroup || null,
         attachments: []
     };
