@@ -60,7 +60,6 @@ app.post('/upload', (req, res, next) => {
             size: req.file.size,
             originalName: req.file.originalname
         });
-        });
 });
 
 server.listen(PORT, () => {
