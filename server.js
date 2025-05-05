@@ -340,11 +340,17 @@ function getFileType(mimetype) {
   return 'file';
 }
 
-// فایل‌های استاتیک
+// فایل‌های استاتیک - Move this BEFORE the catch-all route
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
-// مسیر ریشه
+// Create uploads directory if it doesn't exist
+const uploadsDir = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// مسیر ریشه - This should be the last route
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });

@@ -131,7 +131,7 @@
             padding: 12px;
             margin-bottom: 10px;
             background-color: var(--dark-3);
-            color: var(--light);
+            color: var (--light);
             border: none;
             border-radius: 8px;
             cursor: pointer;
@@ -581,10 +581,13 @@
     </div>
 
     <div class="theme-toggle">
-    <script src="/socket.io/socket.io.js" defer></script>
-    <script src="/script.js" defer></script>
+        <button id="toggle-theme">
+            <i class="fas fa-moon"></i>
+        </button>
+    </div>
 
     <script src="/socket.io/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/openpgp/dist/openpgp.min.js"></script>
     <script src="/script.js"></script>
 </body>
 </html>
