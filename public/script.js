@@ -21,7 +21,11 @@ const elements = {
     previewArea: document.getElementById('preview-area'),
     filePreviews: document.getElementById('file-previews'),
     clearPreview: document.getElementById('clear-preview'),
-    toggleThemeBtn: document.getElementById('toggle-theme')
+    toggleThemeBtn: document.getElementById('toggle-theme'),
+    stickerBtn: document.getElementById('sticker-btn'),
+    stickerPanel: document.getElementById('sticker-panel'),
+    stickerTabs: document.querySelector('.sticker-tabs'),
+    stickerContent: document.querySelector('.sticker-content'),
 };
 
 // State management
@@ -29,6 +33,21 @@ let currentUsername = localStorage.getItem('username') || '';
 let currentGroup = null;
 let attachments = [];
 let isLightMode = localStorage.getItem('theme') === 'light';
+
+// Add sticker packs data
+const STICKER_PACKS = [
+    {
+        id: 'emotions',
+        name: 'احساسات',
+        icon: '😊',
+        stickers: [
+            { id: 'happy', url: '/stickers/emotions/happy.png', emoji: '😊' },
+            { id: 'sad', url: '/stickers/emotions/sad.png', emoji: '😢' },
+            // Add more stickers...
+        ]
+    },
+    // Add more packs...
+];
 
 // Event Listeners
 elements.saveUsernameBtn?.addEventListener('click', handleSaveUsername);
@@ -41,6 +60,10 @@ elements.attachBtn?.addEventListener('click', () => elements.fileInput.click());
 elements.fileInput?.addEventListener('change', handleFileSelect);
 elements.clearPreview?.addEventListener('click', clearAttachments);
 elements.toggleThemeBtn?.addEventListener('click', toggleTheme);
+elements.stickerBtn?.addEventListener('click', toggleStickerPanel);
+elements.messageInput?.addEventListener('input', handleTyping);
+
+let typingTimeout;
 
 // Message handling functions
 function handleSendMessage() {
@@ -96,6 +119,11 @@ function handleSaveUsername() {
 
 // Group management functions
 function handleCreateGroup() {
+    if (!currentUsername) {
+        showToast('لطفا ابتدا نام کاربری خود را تنظیم کنید', 'error');
+        return;
+    }
+
     const groupName = prompt('لطفاً نام گروه را وارد کنید:');
     if (!groupName?.trim()) return;
 
@@ -104,6 +132,10 @@ function handleCreateGroup() {
             currentGroup = response.group.id;
             updateGroupInfo(response.group);
             showToast('گروه با موفقیت ایجاد شد');
+            
+            // Update UI to show we're in a group
+            elements.chatTitle.textContent = `گروه: ${response.group.name}`;
+            elements.chatMessages.innerHTML = ''; // Clear previous messages
         } else {
             showToast(response.error || 'خطا در ایجاد گروه', 'error');
         }
@@ -111,10 +143,28 @@ function handleCreateGroup() {
 }
 
 function handleJoinGroup() {
+    if (!currentUsername) {
+        showToast('لطفا ابتدا نام کاربری خود را تنظیم کنید', 'error');
+        return;
+    }
+
     const inviteLink = prompt('لطفاً کد دعوت گروه را وارد کنید:');
     if (!inviteLink?.trim()) return;
 
-    const [groupId, inviteCode] = inviteLink.split(':');
+    // Support both full URL and just the code
+    let groupId, inviteCode;
+    if (inviteLink.includes('?join=')) {
+        const code = inviteLink.split('?join=')[1];
+        [groupId, inviteCode] = code.split(':');
+    } else {
+        [groupId, inviteCode] = inviteLink.split(':');
+    }
+
+    if (!groupId || !inviteCode) {
+        showToast('کد دعوت نامعتبر است', 'error');
+        return;
+    }
+
     socket.emit('join-group', { groupId, inviteCode }, handleJoinGroupResponse);
 }
 
@@ -123,7 +173,20 @@ function handleJoinGroupResponse(response) {
         currentGroup = response.group.id;
         updateGroupInfo(response.group);
         showToast(`به گروه ${response.group.name} پیوستید`);
-        loadGroupMessages(response.messages);
+        
+        // Update UI
+        elements.chatTitle.textContent = `گروه: ${response.group.name}`;
+        elements.chatMessages.innerHTML = ''; // Clear previous messages
+        
+        // Load group messages
+        if (response.messages?.length > 0) {
+            loadGroupMessages(response.messages);
+        }
+
+        // Update members list if available
+        if (response.group.members?.length > 0) {
+            updateMembersList(response.group.members);
+        }
     } else {
         showToast(response.error || 'خطا در پیوستن به گروه', 'error');
     }
@@ -194,7 +257,7 @@ function createFilePreview(file) {
 function updateGroupInfo(group) {
     elements.groupInfo.style.display = 'block';
     elements.groupName.textContent = `گروه: ${group.name}`;
-    elements.inviteCode.textContent = group.inviteCode;
+    elements.inviteCode.textContent = `${group.id}:${group.inviteCode}`;
     elements.chatTitle.textContent = `گروه: ${group.name}`;
 }
 
@@ -207,9 +270,12 @@ function clearAttachments() {
 
 function handleCopyInvite() {
     const inviteText = elements.inviteCode.textContent;
-    navigator.clipboard.writeText(inviteText)
-        .then(() => showToast('کد دعوت کپی شد'))
-        .catch(() => showToast('خطا در کپی کد دعوت', 'error'));
+    const currentUrl = window.location.origin;
+    const inviteLink = `${currentUrl}?join=${inviteText}`;
+    
+    navigator.clipboard.writeText(inviteLink)
+        .then(() => showToast('لینک دعوت کپی شد'))
+        .catch(() => showToast('خطا در کپی لینک دعوت', 'error'));
 }
 
 function showToast(message, type = 'success') {
@@ -253,9 +319,25 @@ socket.on('new-message', message => {
 
 socket.on('user-joined', data => {
     showToast(`${data.username} وارد شد`);
+    if (data.groupId === currentGroup) {
+        updateMembersList(data.members);
+    }
 });
 
 socket.on('user-left', data => {
+    showToast(`${data.username} از گروه خارج شد`);
+    if (data.groupId === currentGroup) {
+        updateMembersList(data.members);
+    }
+});
+
+socket.on('group-updated', data => {
+    if (data.id === currentGroup) {
+        updateMembersList(data.members);
+    }
+});
+
+socket.on('user-disconnected', data => {
     showToast(`${data.username} خارج شد`);
 });
 
@@ -287,15 +369,46 @@ function displayMessage(message, isMyMessage = false) {
         }).join('');
     }
 
+    // Add sticker support
+    if (message.sticker) {
+        attachmentsHTML = `
+            <div class="sticker-message">
+                <img src="${message.sticker.url}" alt="استیکر">
+            </div>
+        `;
+    }
+
+    // Add reactions
+    let reactionsHTML = '';
+    if (message.reactions?.length > 0) {
+        reactionsHTML = `
+            <div class="message-reactions">
+                ${message.reactions.map(reaction => `
+                    <button class="reaction-btn" onclick="addReaction('${message.id}', '${reaction.emoji}')">
+                        ${reaction.emoji} ${reaction.users.length}
+                    </button>
+                `).join('')}
+            </div>
+        `;
+    }
+
     messageElement.innerHTML = `
         <strong>${message.username || 'ناشناس'}</strong>
         ${attachmentsHTML}
         ${message.text ? `<div class="message-text">${message.text}</div>` : ''}
+        ${reactionsHTML}
         <small>${new Date(message.timestamp).toLocaleTimeString('fa-IR')}</small>
     `;
 
     elements.chatMessages.appendChild(messageElement);
     elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+}
+
+function loadGroupMessages(messages) {
+    elements.chatMessages.innerHTML = '';
+    messages.forEach(msg => {
+        displayMessage(msg, msg.sender === socket.id);
+    });
 }
 
 // Initialize
@@ -305,10 +418,147 @@ if (currentUsername) {
 
 // URL params handling
 const urlParams = new URLSearchParams(window.location.search);
-const joinGroupId = urlParams.get('join');
-if (joinGroupId) {
-    const inviteCode = urlParams.get('code');
-    if (inviteCode) {
-        socket.emit('join-group', { groupId: joinGroupId, inviteCode });
+const joinCode = urlParams.get('join');
+if (joinCode) {
+    const [groupId, inviteCode] = joinCode.split(':');
+    if (groupId && inviteCode) {
+        socket.emit('join-group', { groupId, inviteCode });
     }
 }
+
+function updateMembersList(members) {
+    // Create members list if it doesn't exist
+    if (!elements.membersList) {
+        elements.membersList = document.createElement('div');
+        elements.membersList.className = 'members-list';
+        elements.groupInfo.appendChild(elements.membersList);
+    }
+
+    elements.membersList.innerHTML = `
+        <h4>اعضای گروه (${members.length})</h4>
+        ${members.map(username => `
+            <div class="member">
+                <i class="fas fa-user"></i>
+                ${username}
+            </div>
+        `).join('')}
+    `;
+}
+
+function toggleStickerPanel() {
+    const isVisible = elements.stickerPanel.style.display === 'flex';
+    elements.stickerPanel.style.display = isVisible ? 'none' : 'flex';
+    
+    if (!isVisible && !elements.stickerPanel.dataset.initialized) {
+        initializeStickerPanel();
+    }
+}
+
+function initializeStickerPanel() {
+    // Create tabs
+    elements.stickerTabs.innerHTML = STICKER_PACKS.map(pack => `
+        <div class="sticker-tab" data-pack="${pack.id}">
+            ${pack.icon}
+        </div>
+    `).join('');
+
+    // Add tab click handlers
+    elements.stickerTabs.querySelectorAll('.sticker-tab').forEach(tab => {
+        tab.addEventListener('click', () => showStickerPack(tab.dataset.pack));
+    });
+
+    // Show first pack
+    showStickerPack(STICKER_PACKS[0].id);
+    elements.stickerPanel.dataset.initialized = 'true';
+}
+
+function showStickerPack(packId) {
+    const pack = STICKER_PACKS.find(p => p.id === packId);
+    if (!pack) return;
+
+    elements.stickerContent.innerHTML = pack.stickers.map(sticker => `
+        <div class="sticker-item" data-pack="${pack.id}" data-sticker="${sticker.id}">
+            <img src="${sticker.url}" alt="${sticker.emoji}">
+        </div>
+    `).join('');
+
+    elements.stickerContent.querySelectorAll('.sticker-item').forEach(item => {
+        item.addEventListener('click', () => sendSticker(item.dataset.pack, item.dataset.sticker));
+    });
+}
+
+function sendSticker(packId, stickerId) {
+    if (!currentGroup) {
+        showToast('لطفا ابتدا وارد یک گروه شوید', 'error');
+        return;
+    }
+
+    socket.emit('send-sticker', {
+        packId,
+        stickerId,
+        groupId: currentGroup
+    }, response => {
+        if (!response.success) {
+            showToast(response.error || 'خطا در ارسال استیکر', 'error');
+        }
+    });
+
+    toggleStickerPanel();
+}
+
+function addReaction(messageId, emoji) {
+    socket.emit('add-reaction', {
+        messageId,
+        emoji,
+        groupId: currentGroup
+    }, response => {
+        if (!response.success) {
+            showToast(response.error || 'خطا در افزودن واکنش', 'error');
+        }
+    });
+}
+
+function handleTyping() {
+    if (!currentGroup) return;
+
+    socket.emit('typing', {
+        groupId: currentGroup,
+        isTyping: true
+    });
+
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => {
+        socket.emit('typing', {
+            groupId: currentGroup,
+            isTyping: false
+        });
+    }, 1000);
+}
+
+// Add socket event listeners
+socket.on('message-reacted', data => {
+    const messageEl = document.querySelector(`.message[data-id="${data.messageId}"]`);
+    if (messageEl) {
+        const reactionsEl = messageEl.querySelector('.message-reactions');
+        if (data.reactions.length > 0) {
+            reactionsEl.innerHTML = data.reactions.map(reaction => `
+                <button class="reaction-btn" onclick="addReaction('${data.messageId}', '${reaction.emoji}')">
+                    ${reaction.emoji} ${reaction.users.length}
+                </button>
+            `).join('');
+        }
+    }
+});
+
+socket.on('user-typing', data => {
+    const typingEl = document.querySelector('.typing-indicator') || 
+                    document.createElement('div');
+    typingEl.className = 'typing-indicator';
+    
+    if (data.isTyping) {
+        typingEl.textContent = `${data.username} در حال نوشتن...`;
+        elements.chatMessages.appendChild(typingEl);
+    } else {
+        typingEl.remove();
+    }
+});

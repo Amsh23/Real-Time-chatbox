@@ -8,10 +8,82 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const sanitizeHtml = require('sanitize-html');
 const cors = require('cors');
+const mongoose = require('mongoose');
 
 // تنظیمات پایه برای Render.com
 const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/chatapp';
+
+// اتصال به MongoDB
+mongoose.connect(MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 5000
+})
+.then(() => {
+  console.log('✅ Connected to MongoDB successfully');
+  // Verify collections exist
+  return Promise.all([
+    mongoose.connection.db.collection('groups').stats(),
+    mongoose.connection.db.collection('messages').stats()
+  ]);
+})
+.then(() => {
+  console.log('✅ Database collections validated');
+})
+.catch(err => {
+  console.error('❌ MongoDB connection error:', err);
+  process.exit(1);  // Exit if database connection fails
+});
+
+// تعریف مدل‌های MongoDB
+const GroupSchema = new mongoose.Schema({
+  id: String,
+  name: String,
+  admin: String,
+  members: [String],
+  inviteCode: String,
+  createdAt: Date
+});
+
+const MessageSchema = new mongoose.Schema({
+  id: String,
+  text: String,
+  sender: String,
+  username: String,
+  avatar: String,
+  groupId: String,
+  timestamp: Date,
+  attachments: [{
+    url: String,
+    type: String,
+    originalName: String
+  }],
+  sticker: {
+    packId: String,
+    stickerId: String,
+    url: String
+  },
+  reactions: [{
+    emoji: String,
+    users: [String]
+  }]
+});
+
+const StickerPackSchema = new mongoose.Schema({
+  id: String,
+  name: String,
+  stickers: [{
+    id: String,
+    url: String,
+    emoji: String
+  }]
+});
+
+const Group = mongoose.model('Group', GroupSchema);
+const Message = mongoose.model('Message', MessageSchema);
+const StickerPack = mongoose.model('StickerPack', StickerPackSchema);
 
 // ایجاد اپلیکیشن Express
 const app = express();
@@ -156,7 +228,7 @@ io.on('connection', (socket) => {
   });
 
   // ایجاد گروه
-  socket.on('create-group', (groupName, callback) => {
+  socket.on('create-group', async (groupName, callback) => {
     try {
       const user = users.get(socket.id);
       if (!user) return callback({ error: 'لطفا ابتدا نام کاربری خود را تنظیم کنید' });
@@ -165,14 +237,17 @@ io.on('connection', (socket) => {
       const groupId = uuidv4();
       const inviteCode = generateInviteCode();
       
-      groups.set(groupId, {
+      const group = new Group({
         id: groupId,
         name: sanitizedGroupName,
         admin: socket.id,
         members: [socket.id],
         inviteCode: inviteCode,
-        createdAt: new Date().toISOString()
+        createdAt: new Date()
       });
+      
+      await group.save();
+      groups.set(groupId, group);
       
       socket.join(groupId);
       const userGroupsSet = userGroups.get(socket.id) || new Set();
@@ -184,57 +259,89 @@ io.on('connection', (socket) => {
         `گروه "${sanitizedGroupName}" با موفقیت ایجاد شد!`,
         groupId
       );
-      addMessageToGroup(groupId, welcomeMessage);
+      await addMessageToGroup(groupId, welcomeMessage);
       
       callback({
         success: true,
         group: {
           id: groupId,
           name: sanitizedGroupName,
-          inviteCode: inviteCode
+          inviteCode: `${groupId}:${inviteCode}` // فرمت جدید کد دعوت
         }
       });
       
       io.to(groupId).emit('new-message', welcomeMessage);
     } catch (err) {
+      console.error('Error creating group:', err);
       callback({ error: 'خطا در ایجاد گروه' });
     }
   });
 
   // پیوستن به گروه
-  socket.on('join-group', ({ groupId, inviteCode }, callback) => {
+  socket.on('join-group', async ({ groupId, inviteCode }, callback) => {
     try {
       const user = users.get(socket.id);
       if (!user) return callback({ error: 'لطفا ابتدا نام کاربری خود را تنظیم کنید' });
 
-      const group = groups.get(groupId);
-      if (!group || group.inviteCode !== inviteCode) {
+      const group = await Group.findOne({ id: groupId });
+      if (!group) {
+        return callback({ error: 'گروه یافت نشد' });
+      }
+      
+      if (group.inviteCode !== inviteCode) {
         return callback({ error: 'کد دعوت نامعتبر است' });
       }
 
+      if (group.members.includes(socket.id)) {
+        return callback({ error: 'شما قبلاً عضو این گروه هستید' });
+      }
+
+      // Update MongoDB
       group.members.push(socket.id);
+      await group.save();
+      
+      // Update in-memory data
+      if (!groups.has(groupId)) {
+        groups.set(groupId, group);
+      } else {
+        groups.get(groupId).members = group.members;
+      }
+      
       socket.join(groupId);
       const userGroupsSet = userGroups.get(socket.id) || new Set();
       userGroupsSet.add(groupId);
       userGroups.set(socket.id, userGroupsSet);
+      
+      // Load last 100 messages
+      const groupMessages = await Message.find({ groupId })
+        .sort({ timestamp: -1 })
+        .limit(100)
+        .lean();
+      
+      // Update in-memory messages
+      if (!messages.has(groupId)) {
+        messages.set(groupId, groupMessages.reverse());
+      }
       
       // پیام ورود به گروه
       const joinMessage = createSystemMessage(
         `${user.username} به گروه پیوست!`,
         groupId
       );
-      addMessageToGroup(groupId, joinMessage);
+      await addMessageToGroup(groupId, joinMessage);
       
       callback({
         success: true,
         group: {
           id: groupId,
           name: group.name,
+          inviteCode: group.inviteCode,
           members: group.members.map(m => users.get(m)?.username).filter(Boolean)
         },
-        messages: messages.get(groupId) || []
+        messages: messages.get(groupId)
       });
       
+      // Notify other members
       io.to(groupId).emit('new-message', joinMessage);
       io.to(groupId).emit('group-updated', {
         id: groupId,
@@ -245,6 +352,7 @@ io.on('connection', (socket) => {
         })).filter(Boolean)
       });
     } catch (err) {
+      console.error('Error joining group:', err);
       callback({ error: 'خطا در پیوستن به گروه' });
     }
   });
@@ -288,22 +396,135 @@ io.on('connection', (socket) => {
     }
   });
 
-  // قطع ارتباط
-  socket.on('disconnect', () => {
+  // Handle sticker messages
+  socket.on('send-sticker', async ({ packId, stickerId, groupId }, callback) => {
+    try {
+      const user = users.get(socket.id);
+      if (!user) return callback({ error: 'لطفا ابتدا نام کاربری خود را تنظیم کنید' });
+
+      const stickerPack = await StickerPack.findOne({ id: packId });
+      const sticker = stickerPack?.stickers.find(s => s.id === stickerId);
+      
+      if (!sticker) return callback({ error: 'استیکر یافت نشد' });
+
+      const message = {
+        id: uuidv4(),
+        sender: socket.id,
+        username: user.username,
+        avatar: user.avatar,
+        groupId: groupId,
+        timestamp: new Date().toISOString(),
+        sticker: {
+          packId,
+          stickerId,
+          url: sticker.url
+        }
+      };
+
+      await addMessageToGroup(groupId, message);
+      io.to(groupId).emit('new-message', message);
+      callback({ success: true });
+    } catch (err) {
+      callback({ error: 'خطا در ارسال استیکر' });
+    }
+  });
+
+  // Handle message reactions
+  socket.on('add-reaction', async ({ messageId, emoji, groupId }, callback) => {
+    try {
+      const message = await Message.findOne({ id: messageId });
+      if (!message) return callback({ error: 'پیام یافت نشد' });
+
+      const reaction = message.reactions.find(r => r.emoji === emoji);
+      if (reaction) {
+        if (!reaction.users.includes(socket.id)) {
+          reaction.users.push(socket.id);
+        }
+      } else {
+        message.reactions.push({ emoji, users: [socket.id] });
+      }
+
+      await message.save();
+      io.to(groupId).emit('message-reacted', { 
+        messageId,
+        reactions: message.reactions 
+      });
+      callback({ success: true });
+    } catch (err) {
+      callback({ error: 'خطا در افزودن واکنش' });
+    }
+  });
+
+  // Handle typing indicators
+  socket.on('typing', ({ groupId, isTyping }) => {
     const user = users.get(socket.id);
     if (user) {
-      onlineUsers.delete(socket.id);
-      user.status = 'offline';
-      io.emit('user-disconnected', { username: user.username });
-      io.emit('online-count', onlineUsers.size);
-      
-      // اطلاع به گروه‌ها
-      const userGroupsSet = userGroups.get(socket.id) || new Set();
-      userGroupsSet.forEach(groupId => {
-        io.to(groupId).emit('user-left', { username: user.username });
+      io.to(groupId).emit('user-typing', {
+        username: user.username,
+        isTyping
       });
     }
   });
+
+  // قطع ارتباط
+  socket.on('disconnect', async () => {
+    const user = users.get(socket.id);
+    if (user) {
+        try {
+            // Update online status
+            onlineUsers.delete(socket.id);
+            user.status = 'offline';
+            
+            // Remove user from groups in MongoDB
+            const userGroupsSet = userGroups.get(socket.id) || new Set();
+            for (const groupId of userGroupsSet) {
+                const group = await Group.findOne({ id: groupId });
+                if (group) {
+                    // Remove user from group members
+                    group.members = group.members.filter(id => id !== socket.id);
+                    await group.save();
+                    
+                    // Update in-memory data
+                    if (groups.has(groupId)) {
+                        groups.get(groupId).members = group.members;
+                    }
+                    
+                    // Create leave message
+                    const leaveMessage = createSystemMessage(
+                        `${user.username} از گروه خارج شد`,
+                        groupId
+                    );
+                    await addMessageToGroup(groupId, leaveMessage);
+                    
+                    // Notify remaining members
+                    io.to(groupId).emit('new-message', leaveMessage);
+                    io.to(groupId).emit('user-left', { 
+                        username: user.username,
+                        groupId: groupId 
+                    });
+                    io.to(groupId).emit('group-updated', {
+                        id: groupId,
+                        members: group.members.map(m => ({
+                            username: users.get(m)?.username,
+                            avatar: users.get(m)?.avatar,
+                            role: users.get(m)?.role
+                        })).filter(Boolean)
+                    });
+                }
+            }
+            
+            // Clean up user data
+            users.delete(socket.id);
+            userGroups.delete(socket.id);
+            
+            // Broadcast online count update
+            io.emit('user-disconnected', { username: user.username });
+            io.emit('online-count', onlineUsers.size);
+        } catch (err) {
+            console.error('Error handling disconnect:', err);
+        }
+    }
+});
 });
 
 // توابع کمکی
@@ -320,7 +541,13 @@ function createSystemMessage(text, groupId) {
   };
 }
 
-function addMessageToGroup(groupId, message) {
+async function addMessageToGroup(groupId, message) {
+  const newMessage = new Message({
+    ...message,
+    timestamp: new Date(message.timestamp)
+  });
+  await newMessage.save();
+  
   if (!messages.has(groupId)) {
     messages.set(groupId, []);
   }
