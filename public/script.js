@@ -142,30 +142,52 @@ function handleCreateGroup() {
     });
 }
 
-function handleJoinGroup() {
+// بهبود عملکرد پیوستن به گروه
+async function handleJoinGroup() {
     if (!currentUsername) {
         showToast('لطفا ابتدا نام کاربری خود را تنظیم کنید', 'error');
         return;
     }
 
-    const inviteLink = prompt('لطفاً کد دعوت گروه را وارد کنید:');
+    const inviteLink = prompt('لطفاً لینک یا کد دعوت گروه را وارد کنید:');
     if (!inviteLink?.trim()) return;
 
-    // Support both full URL and just the code
-    let groupId, inviteCode;
-    if (inviteLink.includes('?join=')) {
-        const code = inviteLink.split('?join=')[1];
-        [groupId, inviteCode] = code.split(':');
-    } else {
-        [groupId, inviteCode] = inviteLink.split(':');
-    }
+    try {
+        let groupId, inviteCode;
+        
+        // پشتیبانی از فرمت‌های مختلف لینک
+        if (inviteLink.includes('/api/groups/')) {
+            const parts = inviteLink.split('/');
+            groupId = parts[parts.length - 3];
+            inviteCode = parts[parts.length - 1];
+        } else if (inviteLink.includes('?join=')) {
+            const code = inviteLink.split('?join=')[1];
+            [groupId, inviteCode] = code.split(':');
+        } else {
+            [groupId, inviteCode] = inviteLink.split(':');
+        }
 
-    if (!groupId || !inviteCode) {
-        showToast('کد دعوت نامعتبر است', 'error');
-        return;
-    }
+        if (!groupId || !inviteCode) {
+            showToast('فرمت لینک دعوت نامعتبر است', 'error');
+            return;
+        }
 
-    socket.emit('join-group', { groupId, inviteCode }, handleJoinGroupResponse);
+        // اول چک کردن اعتبار لینک
+        const response = await fetch(`/api/groups/${groupId}/join/${inviteCode}`);
+        const data = await response.json();
+        
+        if (!data.success) {
+            showToast(data.error || 'لینک دعوت نامعتبر است', 'error');
+            return;
+        }
+
+        // حالا به گروه بپیوندید
+        socket.emit('join-group', { groupId, inviteCode }, handleJoinGroupResponse);
+
+    } catch (err) {
+        showToast('خطا در پیوستن به گروه', 'error');
+        console.error('Error joining group:', err);
+    }
 }
 
 function handleJoinGroupResponse(response) {
@@ -271,10 +293,14 @@ function clearAttachments() {
 function handleCopyInvite() {
     const inviteText = elements.inviteCode.textContent;
     const currentUrl = window.location.origin;
-    const inviteLink = `${currentUrl}?join=${inviteText}`;
+    const inviteLink = `${currentUrl}/api/groups/${inviteText.split(':')[0]}/join/${inviteText.split(':')[1]}`;
     
     navigator.clipboard.writeText(inviteLink)
-        .then(() => showToast('لینک دعوت کپی شد'))
+        .then(() => {
+            showToast('لینک دعوت کپی شد');
+            // ذخیره لینک در localStorage برای بازیابی بعدی
+            localStorage.setItem('lastInviteLink', inviteLink);
+        })
         .catch(() => showToast('خطا در کپی لینک دعوت', 'error'));
 }
 

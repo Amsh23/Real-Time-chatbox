@@ -15,26 +15,50 @@ const PORT = process.env.PORT || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/chatapp';
 
-// اتصال به MongoDB
+// اتصال به MongoDB با تنظیمات بهینه
 mongoose.connect(MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  serverSelectionTimeoutMS: 5000
+    serverSelectionTimeoutMS: 5000,
+    socketTimeoutMS: 45000,
+    connectTimeoutMS: 10000,
+    heartbeatFrequencyMS: 10000,
+    family: 4 // Force IPv4
 })
 .then(() => {
-  console.log('✅ Connected to MongoDB successfully');
-  // Verify collections exist
-  return Promise.all([
-    mongoose.connection.db.collection('groups').stats(),
-    mongoose.connection.db.collection('messages').stats()
-  ]);
+    console.log('✅ Connected to MongoDB Atlas successfully');
+    console.log('Database connection mode:', NODE_ENV);
+    
+    // بررسی وجود کالکشن‌های مورد نیاز
+    return Promise.all([
+        mongoose.connection.db.collection('groups').stats(),
+        mongoose.connection.db.collection('messages').stats()
+    ]);
 })
 .then(() => {
-  console.log('✅ Database collections validated');
+    console.log('✅ Required collections exist and are accessible');
 })
 .catch(err => {
-  console.error('❌ MongoDB connection error:', err);
-  process.exit(1);  // Exit if database connection fails
+    console.error('❌ MongoDB connection error:', err);
+    // در محیط production برنامه را متوقف می‌کنیم
+    if (NODE_ENV === 'production') {
+        console.error('Exiting due to MongoDB connection failure in production');
+        process.exit(1);
+    }
+});
+
+// اضافه کردن error handler برای mongoose
+mongoose.connection.on('error', err => {
+    console.error('MongoDB connection error:', err);
+    if (NODE_ENV === 'production') {
+        console.error('Mongoose connection error in production - attempting to reconnect...');
+        mongoose.connect(MONGODB_URI).catch(console.error);
+    }
+});
+
+mongoose.connection.on('disconnected', () => {
+    console.warn('MongoDB disconnected - attempting to reconnect...');
+    if (NODE_ENV === 'production') {
+        mongoose.connect(MONGODB_URI).catch(console.error);
+    }
 });
 
 // تعریف مدل‌های MongoDB
@@ -161,15 +185,57 @@ app.post('/upload', upload.single('file'), (req, res) => {
 });
 
 // مسیرهای API
-app.get('/api/groups', (req, res) => {
-  const groupList = Array.from(groups.values()).map(group => ({
-    id: group.id,
-    name: sanitizeHtml(group.name, { allowedTags: [], allowedAttributes: {} }),
-    admin: group.admin,
-    members: group.members.length,
-    createdAt: group.createdAt
-  }));
-  res.json(groupList);
+app.get('/api/groups', async (req, res) => {
+  try {
+    const groups = await Group.find({}).lean();
+    const groupList = groups.map(group => ({
+      id: group.id,
+      name: sanitizeHtml(group.name, { allowedTags: [], allowedAttributes: {} }),
+      admin: group.admin,
+      members: group.members.length,
+      createdAt: group.createdAt
+    }));
+    res.json(groupList);
+  } catch (err) {
+    res.status(500).json({ error: 'خطا در دریافت لیست گروه‌ها' });
+  }
+});
+
+app.get('/api/groups/:groupId', async (req, res) => {
+  try {
+    const group = await Group.findOne({ id: req.params.groupId });
+    if (!group) {
+      return res.status(404).json({ error: 'گروه یافت نشد' });
+    }
+    res.json({
+      id: group.id,
+      name: group.name,
+      membersCount: group.members.length
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'خطا در دریافت اطلاعات گروه' });
+  }
+});
+
+app.get('/api/groups/:groupId/join/:inviteCode', async (req, res) => {
+  try {
+    const { groupId, inviteCode } = req.params;
+    const group = await Group.findOne({ id: groupId, inviteCode });
+    
+    if (!group) {
+      return res.status(404).json({ error: 'گروه یا کد دعوت نامعتبر است' });
+    }
+
+    res.json({ 
+      success: true,
+      group: {
+        id: group.id,
+        name: group.name
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'خطا در پردازش لینک دعوت' });
+  }
 });
 
 app.get('/api/groups/:groupId/messages', (req, res) => {

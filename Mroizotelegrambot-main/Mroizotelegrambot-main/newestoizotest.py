@@ -10,6 +10,7 @@ Features:
 - Text-to-speech conversion
 - Text translation
 - Multi-language support
+- MongoDB persistence
 """
 
 import os
@@ -32,6 +33,9 @@ from googletrans import Translator, LANGUAGES
 import time
 from functools import wraps
 from datetime import datetime, timedelta
+import traceback
+from typing import Optional, Dict, Any
+from database.mongodb import db
 
 try:
     import argostranslate.package
@@ -73,20 +77,6 @@ reddit = praw.Reddit(
 )
 
 # ---- SQLite Database ----
-def init_db():
-    conn = sqlite3.connect("bot.db")
-    c = conn.cursor()
-    c.execute("""CREATE TABLE IF NOT EXISTS messages (user_id INTEGER, message TEXT)""")
-    conn.commit()
-    conn.close()
-
-def save_message(user_id, message):
-    conn = sqlite3.connect("bot.db")
-    c = conn.cursor()
-    c.execute("INSERT INTO messages VALUES (?, ?)", (user_id, message))
-    conn.commit()
-    conn.close()
-
 COMMENT_INTERVAL = 1200  # 20 minutes
 
 # Rate limiting
@@ -97,44 +87,60 @@ RATE_LIMIT = {
     "auto_post": {"count": 0, "last_reset": time.time(), "limit": 3, "window": 3600},  # 3 auto-posts per hour
 }
 
+async def init_mongodb():
+    """Initialize MongoDB connection"""
+    try:
+        await db.connect()
+    except Exception as e:
+        logging.error(f"Failed to initialize MongoDB: {str(e)}")
+        raise
+
 def rate_limit(limit_type):
     def decorator(func):
         @wraps(func)
         async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
-            current_time = time.time()
-            limit_info = RATE_LIMIT[limit_type]
-            
-            # Reset counter if window has passed
-            if current_time - limit_info["last_reset"] > limit_info["window"]:
-                limit_info["count"] = 0
-                limit_info["last_reset"] = current_time
-            
-            # Check if limit exceeded
-            if limit_info["count"] >= limit_info["limit"]:
-                remaining = int(limit_info["window"] - (current_time - limit_info["last_reset"]))
-                await update.message.reply_text(
-                    f"⚠️ Rate limit exceeded. Please wait {remaining} seconds before trying again."
+            try:
+                user_id = update.effective_user.id
+                # Update user activity
+                await db.update_user_activity(user_id, update.effective_user.username)
+                
+                # Check rate limit
+                limit_info = RATE_LIMIT[limit_type]
+                if not await db.check_rate_limit(
+                    user_id, 
+                    limit_type,
+                    limit_info["limit"],
+                    limit_info["window"]
+                ):
+                    await update.message.reply_text(
+                        f"⚠️ Rate limit exceeded for {limit_type}. Please try again later."
+                    )
+                    return
+                
+                return await func(update, context, *args, **kwargs)
+            except Exception as e:
+                await db.log_error(
+                    "rate_limit_error",
+                    str(e),
+                    traceback.format_exc()
                 )
-                return
-            
-            limit_info["count"] += 1
-            return await func(update, context, *args, **kwargs)
+                raise
         return wrapper
     return decorator
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle errors gracefully"""
+    """Log errors to MongoDB"""
     error = context.error
-    logging.error(f"Error occurred: {error}")
-    
-    error_message = "❌ An error occurred. Please try again later."
-    if isinstance(error, praw.exceptions.RedditAPIException):
-        error_message = f"❌ Reddit API Error: {error.message}"
-    elif isinstance(error, aiohttp.ClientError):
-        error_message = "❌ Network error. Please check your connection."
+    await db.log_error(
+        type(error).__name__,
+        str(error),
+        "".join(traceback.format_tb(error.__traceback__))
+    )
     
     if update and update.effective_message:
-        await update.effective_message.reply_text(error_message)
+        await update.effective_message.reply_text(
+            "❌ An error occurred. Please try again later."
+        )
 
 # ---- Command Definitions ----
 COMMANDS = [
@@ -539,10 +545,54 @@ async def retry_api_call(func, *args, **kwargs):
         await asyncio.sleep(e.retry_after)
         return await func(*args, **kwargs)
 
+# Add new command to view user stats
+async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show user statistics"""
+    try:
+        user_id = update.effective_user.id
+        stats = await db.get_user_stats(user_id)
+        
+        response = "📊 Your Usage Statistics:\n\n"
+        for command_type, count in stats.items():
+            response += f"{command_type}: {count} times\n"
+        
+        await update.message.reply_text(response)
+    except Exception as e:
+        await db.log_error("stats_error", str(e), traceback.format_exc())
+        await update.message.reply_text("❌ Failed to retrieve statistics")
+
+# Update message handling to store in MongoDB
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle incoming messages"""
+    try:
+        user_id = update.effective_user.id
+        message = update.message.text
+        
+        # Save message to MongoDB
+        await db.save_message(
+            user_id=user_id,
+            message=message,
+            message_type="text"
+        )
+        
+        # Update user activity
+        await db.update_user_activity(
+            user_id,
+            update.effective_user.username
+        )
+        
+        # Process message...
+        
+    except Exception as e:
+        await db.log_error("message_handler_error", str(e), traceback.format_exc())
+        await update.message.reply_text("❌ Failed to process message")
+
 # ---- Main ----
 async def main():
     try:
-        init_db()
+        # Initialize MongoDB
+        await init_mongodb()
+        
         application = Application.builder().token(ENV_VARS["TOKEN"]).build()
         
         # Set up command handlers with retry wrapper
@@ -567,7 +617,8 @@ async def main():
             CommandHandler("languages", show_languages),
             CommandHandler("rules", get_subreddit_rules),
             CommandHandler("trending", get_trending_posts),
-            CommandHandler("auto_post", start_auto_posting)
+            CommandHandler("auto_post", start_auto_posting),
+            CommandHandler("stats", show_stats)
         ]:
             application.add_handler(handler)
         
