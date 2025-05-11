@@ -33,6 +33,11 @@ let currentUsername = localStorage.getItem('username') || '';
 let currentGroup = null;
 let attachments = [];
 let isLightMode = localStorage.getItem('theme') === 'light';
+let isLoadingMore = false;
+let hasMoreMessages = true;
+let offlineQueue = [];
+let lastMessageTimestamp = null;
+let isOnline = true;
 
 // Add sticker packs data
 const STICKER_PACKS = [
@@ -43,11 +48,72 @@ const STICKER_PACKS = [
         stickers: [
             { id: 'happy', url: '/stickers/emotions/happy.png', emoji: '😊' },
             { id: 'sad', url: '/stickers/emotions/sad.png', emoji: '😢' },
-            // Add more stickers...
+            { id: 'love', url: '/stickers/emotions/love.png', emoji: '❤️' },
+            { id: 'laugh', url: '/stickers/emotions/laugh.png', emoji: '😂' },
+            { id: 'angry', url: '/stickers/emotions/angry.png', emoji: '😠' }
         ]
     },
-    // Add more packs...
+    {
+        id: 'animals',
+        name: 'حیوانات',
+        icon: '🐱',
+        stickers: [
+            { id: 'cat', url: '/stickers/animals/cat.png', emoji: '🐱' },
+            { id: 'dog', url: '/stickers/animals/dog.png', emoji: '🐶' },
+            { id: 'rabbit', url: '/stickers/animals/rabbit.png', emoji: '🐰' },
+            { id: 'bear', url: '/stickers/animals/bear.png', emoji: '🐻' }
+        ]
+    },
+    {
+        id: 'food',
+        name: 'غذاها',
+        icon: '🍕',
+        stickers: [
+            { id: 'pizza', url: '/stickers/food/pizza.png', emoji: '🍕' },
+            { id: 'burger', url: '/stickers/food/burger.png', emoji: '🍔' },
+            { id: 'icecream', url: '/stickers/food/icecream.png', emoji: '🍦' },
+            { id: 'cake', url: '/stickers/food/cake.png', emoji: '🎂' }
+        ]
+    },
+    {
+        id: 'activities',
+        name: 'فعالیت‌ها',
+        icon: '⚽',
+        stickers: [
+            { id: 'soccer', url: '/stickers/activities/soccer.png', emoji: '⚽' },
+            { id: 'basketball', url: '/stickers/activities/basketball.png', emoji: '🏀' },
+            { id: 'gaming', url: '/stickers/activities/gaming.png', emoji: '🎮' },
+            { id: 'music', url: '/stickers/activities/music.png', emoji: '🎵' }
+        ]
+    }
 ];
+
+// Initialize Intersection Observer for infinite scroll
+const scrollObserver = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting && !isLoadingMore && hasMoreMessages && currentGroup) {
+        loadMoreMessages();
+    }
+}, { threshold: 0.1 });
+
+// Add scroll sentinel element to chat messages
+const scrollSentinel = document.createElement('div');
+scrollSentinel.className = 'scroll-sentinel';
+elements.chatMessages.prepend(scrollSentinel);
+scrollObserver.observe(scrollSentinel);
+
+// Add lazy loading for images and videos
+const mediaObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            const media = entry.target;
+            if (media.dataset.src) {
+                media.src = media.dataset.src;
+                delete media.dataset.src;
+                mediaObserver.unobserve(media);
+            }
+        }
+    });
+}, { threshold: 0.1 });
 
 // Event Listeners
 elements.saveUsernameBtn?.addEventListener('click', handleSaveUsername);
@@ -66,18 +132,33 @@ elements.messageInput?.addEventListener('input', handleTyping);
 let typingTimeout;
 
 // Message handling functions
-function handleSendMessage() {
+async function handleSendMessage() {
     const text = elements.messageInput.value.trim();
     if (text === '' && attachments.length === 0) {
         showToast('لطفاً پیام یا فایل وارد کنید', 'error');
         return;
     }
 
-    socket.emit('send-message', {
+    const message = {
         text,
         groupId: currentGroup,
-        attachments: attachments
-    }, handleMessageResponse);
+        attachments: attachments,
+        timestamp: new Date()
+    };
+
+    if (!isOnline) {
+        offlineQueue.push(message);
+        showToast('پیام در صف ارسال قرار گرفت');
+        elements.messageInput.value = '';
+        clearAttachments();
+        return;
+    }
+
+    sendMessage(message);
+}
+
+function sendMessage(message) {
+    socket.emit('send-message', message, handleMessageResponse);
 
     elements.messageInput.value = '';
     clearAttachments();
@@ -376,59 +457,259 @@ function getFileIcon(mimetype) {
 }
 
 function displayMessage(message, isMyMessage = false) {
+    const messageElement = createMessageElement(message, isMyMessage);
+    elements.chatMessages.appendChild(messageElement);
+    elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+}
+
+function createMessageElement(message, isMyMessage = false) {
     const messageElement = document.createElement('div');
     messageElement.className = `message ${isMyMessage ? 'my-message' : 'other-message'}`;
     messageElement.dataset.id = message.id;
 
+    // Message actions menu
+    const actionsHTML = isMyMessage ? `
+        <div class="message-actions">
+            <button class="action-btn edit-btn" onclick="handleEditClick('${message.id}')">
+                <i class="fas fa-edit"></i>
+            </button>
+            <button class="action-btn delete-btn" onclick="handleDeleteClick('${message.id}')">
+                <i class="fas fa-trash"></i>
+            </button>
+            <button class="action-btn reply-btn" onclick="handleReplyClick('${message.id}')">
+                <i class="fas fa-reply"></i>
+            </button>
+            <button class="action-btn pin-btn" onclick="handlePinClick('${message.id}')">
+                <i class="fas fa-thumbtack"></i>
+            </button>
+        </div>
+    ` : `
+        <div class="message-actions">
+            <button class="action-btn reply-btn" onclick="handleReplyClick('${message.id}')">
+                <i class="fas fa-reply"></i>
+            </button>
+            <button class="action-btn pin-btn" onclick="handlePinClick('${message.id}')">
+                <i class="fas fa-thumbtack"></i>
+            </button>
+        </div>
+    `;
+
+    // Reply info if this is a reply
+    const replyHTML = message.metadata?.replyTo ? `
+        <div class="reply-info">
+            <i class="fas fa-reply"></i>
+            <span class="reply-to">${message.metadata.replyTo.username}:</span>
+            <span class="reply-text">${message.metadata.replyTo.message}</span>
+        </div>
+    ` : '';
+
+    // Pinned indicator
+    const pinnedHTML = message.metadata?.pinned ? `
+        <div class="pinned-indicator">
+            <i class="fas fa-thumbtack"></i>
+            <span>پین شده توسط ${message.metadata.pinnedBy}</span>
+        </div>
+    ` : '';
+
+    // Edited indicator
+    const editedHTML = message.metadata?.edited ? `
+        <span class="edited-indicator">(ویرایش شده)</span>
+    ` : '';
+
+    // Handle attachments with lazy loading
     let attachmentsHTML = '';
     if (message.attachments?.length > 0) {
         attachmentsHTML = message.attachments.map(att => {
-            if (att.type === 'image') {
-                return `<div class="attachment image"><img src="${att.url}" alt="تصویر"></div>`;
+            if (att.type.startsWith('image/')) {
+                const placeholder = `data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E`;
+                return `
+                    <div class="attachment image">
+                        <img src="${placeholder}" data-src="${att.url}" alt="تصویر" 
+                             loading="lazy" class="lazy-media">
+                    </div>`;
+            } else if (att.type.startsWith('video/')) {
+                return `
+                    <div class="attachment video">
+                        <video controls preload="none" data-src="${att.url}" 
+                               poster="/images/video-placeholder.png" class="lazy-media">
+                            <source type="${att.type}" data-src="${att.url}">
+                        </video>
+                    </div>`;
             }
-            return `<div class="attachment file">
-                <a href="${att.url}" target="_blank" download>
-                    <i class="fas ${getFileIcon(att.type)}"></i>
-                    <span>${att.originalName}</span>
-                </a>
-            </div>`;
+            return `
+                <div class="attachment file">
+                    <a href="${att.url}" target="_blank" download>
+                        <i class="fas ${getFileIcon(att.type)}"></i>
+                        <span>${att.originalName}</span>
+                    </a>
+                </div>`;
         }).join('');
     }
 
-    // Add sticker support
-    if (message.sticker) {
-        attachmentsHTML = `
-            <div class="sticker-message">
-                <img src="${message.sticker.url}" alt="استیکر">
-            </div>
-        `;
-    }
-
-    // Add reactions
-    let reactionsHTML = '';
-    if (message.reactions?.length > 0) {
-        reactionsHTML = `
-            <div class="message-reactions">
-                ${message.reactions.map(reaction => `
-                    <button class="reaction-btn" onclick="addReaction('${message.id}', '${reaction.emoji}')">
-                        ${reaction.emoji} ${reaction.users.length}
-                    </button>
-                `).join('')}
-            </div>
-        `;
-    }
-
     messageElement.innerHTML = `
-        <strong>${message.username || 'ناشناس'}</strong>
+        ${pinnedHTML}
+        ${replyHTML}
+        <div class="message-header">
+            <strong>${message.username || 'ناشناس'}</strong>
+            ${actionsHTML}
+        </div>
         ${attachmentsHTML}
         ${message.text ? `<div class="message-text">${message.text}</div>` : ''}
-        ${reactionsHTML}
-        <small>${new Date(message.timestamp).toLocaleTimeString('fa-IR')}</small>
+        ${message.sticker ? `<div class="sticker-message"><img src="${message.sticker.url}" alt="استیکر"></div>` : ''}
+        ${reactionsHTML || ''}
+        <div class="message-footer">
+            <small>${new Date(message.timestamp).toLocaleTimeString('fa-IR')}</small>
+            ${editedHTML}
+        </div>
     `;
 
-    elements.chatMessages.appendChild(messageElement);
-    elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+    // Observe lazy-loaded media
+    messageElement.querySelectorAll('.lazy-media').forEach(media => {
+        mediaObserver.observe(media);
+    });
+
+    return messageElement;
 }
+
+// Message editing handlers
+function handleEditClick(messageId) {
+    const messageEl = document.querySelector(`.message[data-id="${messageId}"]`);
+    const textEl = messageEl.querySelector('.message-text');
+    if (!textEl) return;
+
+    const originalText = textEl.textContent;
+    textEl.innerHTML = `
+        <div class="edit-container">
+            <textarea class="edit-input">${originalText}</textarea>
+            <div class="edit-actions">
+                <button onclick="saveEdit('${messageId}')">
+                    <i class="fas fa-check"></i>
+                </button>
+                <button onclick="cancelEdit('${messageId}', '${originalText}')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function saveEdit(messageId) {
+    const messageEl = document.querySelector(`.message[data-id="${messageId}"]`);
+    const editInput = messageEl.querySelector('.edit-input');
+    if (!editInput) return;
+
+    const newText = editInput.value.trim();
+    if (!newText) return;
+
+    socket.emit('edit-message', {
+        messageId,
+        newText,
+        groupId: currentGroup
+    }, response => {
+        if (!response.success) {
+            showToast(response.error || 'خطا در ویرایش پیام', 'error');
+        }
+    });
+}
+
+function cancelEdit(messageId, originalText) {
+    const messageEl = document.querySelector(`.message[data-id="${messageId}"]`);
+    const textEl = messageEl.querySelector('.message-text');
+    textEl.innerHTML = originalText;
+}
+
+// Message delete handler
+function handleDeleteClick(messageId) {
+    if (confirm('آیا از حذف این پیام مطمئن هستید؟')) {
+        socket.emit('delete-message', {
+            messageId,
+            groupId: currentGroup
+        }, response => {
+            if (!response.success) {
+                showToast(response.error || 'خطا در حذف پیام', 'error');
+            }
+        });
+    }
+}
+
+// Message reply handler
+function handleReplyClick(messageId) {
+    const messageEl = document.querySelector(`.message[data-id="${messageId}"]`);
+    const messageText = messageEl.querySelector('.message-text')?.textContent || '';
+    const username = messageEl.querySelector('strong').textContent;
+
+    elements.messageInput.dataset.replyTo = messageId;
+    showReplyPreview(username, messageText);
+}
+
+function showReplyPreview(username, text) {
+    const preview = document.createElement('div');
+    preview.className = 'reply-preview';
+    preview.innerHTML = `
+        <div class="reply-content">
+            <i class="fas fa-reply"></i>
+            <span class="reply-to">${username}:</span>
+            <span class="reply-text">${text.substring(0, 50)}${text.length > 50 ? '...' : ''}</span>
+        </div>
+        <button onclick="cancelReply()">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+
+    const inputArea = elements.messageInput.parentElement;
+    inputArea.insertBefore(preview, elements.messageInput);
+}
+
+function cancelReply() {
+    delete elements.messageInput.dataset.replyTo;
+    document.querySelector('.reply-preview')?.remove();
+}
+
+// Message pin handler
+function handlePinClick(messageId) {
+    socket.emit('pin-message', {
+        messageId,
+        groupId: currentGroup
+    }, response => {
+        if (!response.success) {
+            showToast(response.error || 'خطا در پین کردن پیام', 'error');
+        }
+    });
+}
+
+// Add socket listeners for new message events
+socket.on('message-edited', data => {
+    const messageEl = document.querySelector(`.message[data-id="${data.messageId}"]`);
+    if (messageEl) {
+        const textEl = messageEl.querySelector('.message-text');
+        if (textEl) {
+            textEl.innerHTML = data.newText;
+            messageEl.querySelector('.message-footer').innerHTML += `
+                <span class="edited-indicator">(ویرایش شده)</span>
+            `;
+        }
+    }
+});
+
+socket.on('message-deleted', data => {
+    const messageEl = document.querySelector(`.message[data-id="${data.messageId}"]`);
+    if (messageEl) {
+        messageEl.remove();
+    }
+});
+
+socket.on('message-pinned', data => {
+    const messageEl = document.querySelector(`.message[data-id="${data.messageId}"]`);
+    if (messageEl) {
+        const pinnedIndicator = document.createElement('div');
+        pinnedIndicator.className = 'pinned-indicator';
+        pinnedIndicator.innerHTML = `
+            <i class="fas fa-thumbtack"></i>
+            <span>پین شده توسط ${data.pinnedBy}</span>
+        `;
+        messageEl.insertBefore(pinnedIndicator, messageEl.firstChild);
+    }
+});
 
 function loadGroupMessages(messages) {
     elements.chatMessages.innerHTML = '';
@@ -588,3 +869,90 @@ socket.on('user-typing', data => {
         typingEl.remove();
     }
 });
+
+async function loadMoreMessages() {
+    if (!currentGroup || isLoadingMore || !hasMoreMessages) return;
+    
+    isLoadingMore = true;
+    showLoadingIndicator();
+
+    socket.emit('load-more-messages', {
+        groupId: currentGroup,
+        before: lastMessageTimestamp
+    }, handleLoadMoreResponse);
+}
+
+function handleLoadMoreResponse(response) {
+    isLoadingMore = false;
+    hideLoadingIndicator();
+
+    if (response.success) {
+        if (response.messages.length === 0) {
+            hasMoreMessages = false;
+            return;
+        }
+
+        // Insert messages at the top
+        const fragment = document.createDocumentFragment();
+        response.messages.forEach(msg => {
+            const messageEl = createMessageElement(msg, msg.sender === socket.id);
+            fragment.appendChild(messageEl);
+        });
+
+        // Update last message timestamp for pagination
+        const oldestMessage = response.messages[response.messages.length - 1];
+        lastMessageTimestamp = oldestMessage.timestamp;
+
+        // Preserve scroll position when adding messages
+        const firstMsg = elements.chatMessages.firstElementChild;
+        const oldHeight = elements.chatMessages.scrollHeight;
+        
+        elements.chatMessages.insertBefore(fragment, firstMsg);
+        
+        const newHeight = elements.chatMessages.scrollHeight;
+        elements.chatMessages.scrollTop = newHeight - oldHeight;
+    }
+}
+
+// Offline support
+window.addEventListener('online', handleOnlineStatus);
+window.addEventListener('offline', handleOnlineStatus);
+
+function handleOnlineStatus(event) {
+    isOnline = event.type === 'online';
+    showOnlineStatus();
+
+    if (isOnline) {
+        socket.connect();
+        processOfflineQueue();
+    }
+}
+
+function showOnlineStatus() {
+    const status = document.createElement('div');
+    status.className = `connection-status ${isOnline ? 'online' : 'offline'}`;
+    status.textContent = isOnline ? 'اتصال برقرار شد' : 'اتصال قطع است';
+    document.body.appendChild(status);
+
+    setTimeout(() => status.remove(), 3000);
+}
+
+function processOfflineQueue() {
+    while (offlineQueue.length > 0) {
+        const message = offlineQueue.shift();
+        sendMessage(message);
+    }
+}
+
+// Helper functions
+function showLoadingIndicator() {
+    const loader = document.createElement('div');
+    loader.className = 'loading-indicator';
+    loader.innerHTML = '<i class="fas fa-spinner fa-spin"></i> در حال بارگذاری...';
+    elements.chatMessages.insertBefore(loader, elements.chatMessages.firstChild);
+}
+
+function hideLoadingIndicator() {
+    const loader = document.querySelector('.loading-indicator');
+    if (loader) loader.remove();
+}

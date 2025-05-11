@@ -664,6 +664,329 @@
             color: var(--primary-light);
             margin-left: 8px;
         }
+
+        /* حالت پیام‌های پین شده و پاسخ‌ها */
+        .message-actions {
+            display: none;
+            position: absolute;
+            right: 10px;
+            top: 5px;
+            gap: 5px;
+        }
+
+        .message:hover .message-actions {
+            display: flex;
+        }
+
+        .action-btn {
+            background: none;
+            border: none;
+            color: var(--light-2);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .action-btn:hover {
+            color: var(--primary);
+            background: var(--dark-3);
+        }
+
+        .pinned-indicator {
+            background: var(--primary-dark);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            margin-bottom: 5px;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .reply-info {
+            background: var(--dark-3);
+            padding: 8px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            border-left: 3px solid var(--primary);
+        }
+
+        .reply-to {
+            color: var(--primary-light);
+            margin-right: 5px;
+        }
+
+        .reply-text {
+            color: var(--light-2);
+        }
+
+        .reply-preview {
+            background: var(--dark-3);
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .reply-content {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .edit-container {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .edit-input {
+            width: 100%;
+            min-height: 60px;
+            background: var(--dark-3);
+            border: 1px solid var(--primary);
+            border-radius: 4px;
+            color: var(--light);
+            padding: 8px;
+            resize: vertical;
+        }
+
+        .edit-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        .edit-actions button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .edit-actions button:last-child {
+            background: var(--dark-3);
+        }
+
+        .edited-indicator {
+            color: var(--light-2);
+            font-size: 0.8rem;
+            margin-left: 8px;
+        }
+
+        /* اضافه کردن استایل برای پنل پین شده‌ها */
+        .pinned-messages {
+            background: var(--dark-2);
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .pinned-messages h4 {
+            color: var(--primary-light);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pinned-message {
+            background: var(--dark-3);
+            padding: 8px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .pinned-message:hover {
+            background: var(--dark);
+        }
+
+        .pinned-message i {
+            color: var(--primary-light);
+        }
+
+        /* Loading and connection status indicators */
+        .loading-indicator {
+            text-align: center;
+            padding: 10px;
+            color: var(--light-2);
+            font-size: 0.9rem;
+        }
+
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            animation: slideDown 0.3s ease;
+            z-index: 1000;
+        }
+
+        .connection-status.online {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .connection-status.offline {
+            background-color: var(--danger);
+            color: white;
+        }
+
+        @keyframes slideDown {
+            from { transform: translate(-50%, -100%); }
+            to { transform: translate(-50%, 0); }
+        }
+
+        /* Lazy loading placeholders */
+        .lazy-media {
+            background: var(--dark-3);
+            transition: opacity 0.3s ease;
+        }
+
+        .lazy-media[data-src] {
+            opacity: 0.5;
+        }
+
+        .lazy-media:not([data-src]) {
+            opacity: 1;
+        }
+
+        .scroll-sentinel {
+            height: 10px;
+            margin: 0;
+            padding: 0;
+        }
+
+        .search-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: var(--dark-3);
+            border-radius: 8px;
+        }
+
+        #search-input {
+            flex: 1;
+            padding: 10px 15px;
+            background: var(--dark-2);
+            border: 1px solid var(--dark);
+            border-radius: 6px;
+            color: var(--light);
+            font-size: 0.9rem;
+        }
+
+        #search-btn {
+            padding: 10px 20px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        #search-btn:hover {
+            background: var(--primary-dark);
+        }
+
+        .search-results {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 350px;
+            max-height: 80vh;
+            background: var(--dark-2);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            overflow: hidden;
+        }
+
+        .search-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: var(--dark-3);
+            border-bottom: 1px solid var(--dark);
+        }
+
+        .search-header h3 {
+            color: var(--primary-light);
+            font-size: 1rem;
+        }
+
+        #close-search {
+            background: none;
+            border: none;
+            color: var(--light-2);
+            cursor: pointer;
+            font-size: 1.1rem;
+        }
+
+        #results-container {
+            padding: 15px;
+            overflow-y: auto;
+            max-height: calc(80vh - 60px);
+        }
+
+        .search-result {
+            padding: 10px;
+            margin-bottom: 10px;
+            background: var(--dark-3);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .search-result:hover {
+            background: var(--dark);
+        }
+
+        .search-result .username {
+            color: var(--primary-light);
+            font-size: 0.9rem;
+            margin-bottom: 5px;
+        }
+
+        .search-result .message-preview {
+            color: var(--light);
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .search-result .timestamp {
+            color: var(--light-2);
+            font-size: 0.8rem;
+            margin-top: 5px;
+            text-align: left;
+        }
+
+        .highlight {
+            background: var(--primary);
+            color: white;
+            padding: 0 2px;
+            border-radius: 2px;
+        }
     </style>
 </head>
 <body>
@@ -695,6 +1018,26 @@
         <div class="main-content">
             <div class="chat-area">
                 <h2 id="chat-title"><i class="fas fa-comments"></i> چت عمومی</h2>
+                
+                <!-- Add search bar before chat messages -->
+                <div class="search-bar">
+                    <input type="text" id="search-input" placeholder="جستجو در پیام‌ها...">
+                    <button id="search-btn">
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+
+                <!-- Add search results area -->
+                <div id="search-results" class="search-results" style="display: none;">
+                    <div class="search-header">
+                        <h3>نتایج جستجو</h3>
+                        <button id="close-search">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div id="results-container"></div>
+                </div>
+
                 <div id="chat-messages"></div>
                 
                 <div id="preview-area">
