@@ -1,15 +1,37 @@
 const puppeteer = require('puppeteer');
+const express = require('express');
+const { createServer } = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
+const initializeSocketHandlers = require('../../handlers/socket');
 
 describe('UI and Responsiveness Tests', () => {
     let browser;
     let page;
+    let server;
+    let port;
 
     beforeAll(async () => {
+        // Start server
+        const app = express();
+        app.use(express.static(path.join(__dirname, '../../public')));
+        server = createServer(app);
+        const io = new Server(server);
+        initializeSocketHandlers(io, new Map(), new Map());
+        
+        await new Promise(resolve => {
+            server.listen(0, () => {
+                port = server.address().port;
+                resolve();
+            });
+        });
+
+        // Launch browser
         browser = await puppeteer.launch({
             headless: true,
             args: ['--no-sandbox']
         });
-    });
+    }, 30000);
 
     beforeEach(async () => {
         page = await browser.newPage();
@@ -21,6 +43,7 @@ describe('UI and Responsiveness Tests', () => {
 
     afterAll(async () => {
         await browser.close();
+        await new Promise(resolve => server.close(resolve));
     });
 
     test('should render correctly on mobile devices', async () => {
@@ -31,7 +54,7 @@ describe('UI and Responsiveness Tests', () => {
             isMobile: true
         });
 
-        await page.goto('http://localhost:3000');
+        await page.goto(`http://localhost:${port}`);
 
         // Check if elements are properly visible
         const container = await page.$('.container');
@@ -51,7 +74,7 @@ describe('UI and Responsiveness Tests', () => {
     });
 
     test('should handle theme switching', async () => {
-        await page.goto('http://localhost:3000');
+        await page.goto(`http://localhost:${port}`);
         
         // Click theme toggle button
         await page.click('#toggle-theme');
@@ -64,26 +87,26 @@ describe('UI and Responsiveness Tests', () => {
     });
 
     test('should show loading states', async () => {
-        await page.goto('http://localhost:3000');
+        await page.goto(`http://localhost:${port}`);
         
         // Trigger a message load
         await page.evaluate(() => {
-            socket.emit('load-messages', { groupId: 'test-group' });
+            window.socket.emit('load-messages', { groupId: 'test-group' });
         });
         
-        // Check if loading indicator is visible
-        const loadingIndicator = await page.$('.loading-indicator');
-        const isVisible = await page.evaluate(el => 
-            window.getComputedStyle(el).getPropertyValue('display') !== 'none',
-            loadingIndicator
-        );
+        // Wait for and check loading indicator
+        await page.waitForSelector('.loading-indicator', { visible: true });
+        const isVisible = await page.evaluate(() => {
+            const el = document.querySelector('.loading-indicator');
+            return window.getComputedStyle(el).display !== 'none';
+        });
         expect(isVisible).toBeTruthy();
     });
 
     test('should display file preview', async () => {
-        await page.goto('http://localhost:3000');
+        await page.goto(`http://localhost:${port}`);
         
-        // Simulate file selection
+        // Create a file and trigger the file input
         await page.evaluate(() => {
             const file = new File(['test'], 'test.txt', { type: 'text/plain' });
             const dataTransfer = new DataTransfer();
@@ -92,27 +115,34 @@ describe('UI and Responsiveness Tests', () => {
             document.getElementById('file-input').dispatchEvent(new Event('change'));
         });
         
-        // Check if preview area is visible
-        const previewArea = await page.$('#preview-area');
-        const isVisible = await page.evaluate(el => 
-            window.getComputedStyle(el).getPropertyValue('display') !== 'none',
-            previewArea
-        );
+        // Wait for and check preview area
+        await page.waitForSelector('#preview-area', { visible: true });
+        const isVisible = await page.evaluate(() => {
+            const el = document.getElementById('preview-area');
+            return window.getComputedStyle(el).display !== 'none';
+        });
         expect(isVisible).toBeTruthy();
     });
 
     test('should handle message interactions', async () => {
-        await page.goto('http://localhost:3000');
+        await page.goto(`http://localhost:${port}`);
+        
+        // Set up a username first
+        await page.type('#username-input', 'TestUser');
+        await page.click('#save-username');
         
         // Send a test message
         await page.type('#message-input', 'Test message');
         await page.click('#send-button');
         
+        // Wait for message to appear
+        await page.waitForSelector('.message');
+        
         // Check if message actions appear on hover
         await page.hover('.message');
-        const actionsMenu = await page.$('.message-actions');
+        const actionsMenu = await page.waitForSelector('.message-actions');
         const isVisible = await page.evaluate(el => 
-            window.getComputedStyle(el).getPropertyValue('display') === 'flex',
+            window.getComputedStyle(el).display === 'flex',
             actionsMenu
         );
         expect(isVisible).toBeTruthy();

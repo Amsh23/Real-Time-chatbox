@@ -1,9 +1,6 @@
 // Initialize socket connection
 const socket = io();
 
-// Show connecting message
-showToast('در حال اتصال...', 'info');
-
 // Initialize DOM elements
 const elements = {
     usernameInput: document.getElementById('username-input'),
@@ -21,14 +18,6 @@ let currentUsername = localStorage.getItem('username') || '';
 let currentGroup = null;
 let isLightMode = localStorage.getItem('theme') === 'light';
 let isOnline = true;
-
-// Disable chat input until username is set
-if (elements.messageInput) {
-    elements.messageInput.disabled = !currentUsername;
-}
-if (elements.sendButton) {
-    elements.sendButton.disabled = !currentUsername;
-}
 
 // Toast notifications
 function showToast(message, type = 'info') {
@@ -74,21 +63,6 @@ function handleSetUsername() {
             }
         }
     });
-}
-
-// Theme toggle handler
-function toggleTheme() {
-    isLightMode = !isLightMode;
-    document.body.classList.toggle('light-mode', isLightMode);
-    localStorage.setItem('theme', isLightMode ? 'light' : 'dark');
-    elements.toggleThemeBtn.innerHTML = `<i class="fas fa-${isLightMode ? 'sun' : 'moon'}"></i>`;
-}
-
-// Initialize theme
-if (elements.toggleThemeBtn) {
-    document.body.classList.toggle('light-mode', isLightMode);
-    elements.toggleThemeBtn.innerHTML = `<i class="fas fa-${isLightMode ? 'sun' : 'moon'}"></i>`;
-    elements.toggleThemeBtn.addEventListener('click', toggleTheme);
 }
 
 // Initialize username on page load

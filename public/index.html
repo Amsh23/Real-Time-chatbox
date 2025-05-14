@@ -5,46 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>چت پیشرفته | طرح بنفش</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        /* حالت تاریک */
-        :root {
-            --primary: #6a1b9a; /* بنفش اصلی */
-            --primary-dark: #4a148c; /* بنفش تیره */
-            --primary-light: #9c4dcc; /* بنفش روشن */
-            --secondary: #ffb74d; /* نارنجی */
-            --dark: #121212; /* پس‌زمینه تاریک */
-            --dark-2: #1e1e1e; /* پس‌زمینه تاریک‌تر */
-            --dark-3: #2d2d2d; /* پس‌زمینه بسیار تاریک */
-            --light: #e0e0e0; /* متن روشن */
-            --light-2: #b0b0b0; /* متن روشن‌تر */
-            --danger: #e53935; /* قرمز */
-
-        /* حالت روشن */
-        body.light-mode {
-            --dark: #ffffff; /* پس‌زمینه روشن */
-            --dark-2: #f5f5f5;
-            --dark-3: #e0e0e0;
-            --light: #121212; /* متن تاریک */
-            --light-2: #424242;
-            --primary: #7b1fa2; /* بنفش روشن */
-            --primary-dark: #6a1b9a;
-            --primary-light: #ba68c8;
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Vazirmatn', sans-serif;
-        }
-
-        body {
-            /* Set default dark mode colors for the page */
-            background-color: var(--dark);
-            color: var(--light);
-            min-height: 100vh;
-            padding: 20px;
-        }
+    <link rel="stylesheet" href="/css/main.css">
         .container {
             max-width: 1200px;
             margin: 0 auto;
@@ -267,7 +228,7 @@
         }
 
         .other-message {
-            background-color: var(--dark);
+            background-color: var (--dark);
             color: var(--light);
             margin-right: auto;
             border-bottom-left-radius: 4px;
@@ -914,7 +875,7 @@
             right: 20px;
             width: 350px;
             max-height: 80vh;
-            background: var(--dark-2);
+            background: var (--dark-2);
             border-radius: 12px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
             z-index: 1000;
@@ -987,10 +948,104 @@
             padding: 0 2px;
             border-radius: 2px;
         }
+
+        .username-form {
+            max-width: 400px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background-color: var(--dark-2);
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            text-align: center;
+        }
+
+        .username-form h2 {
+            color: var(--primary);
+            margin-bottom: 1.5rem;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 1rem;
+        }
+
+        .input-group input {
+            flex: 1;
+            padding: 10px 15px;
+            border: 2px solid var(--primary);
+            border-radius: 5px;
+            background-color: var(--dark-3);
+            color: var(--light);
+            font-size: 1rem;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: var(--primary-light);
+            box-shadow: 0 0 0 2px rgba(106, 27, 154, 0.2);
+            transition: all 0.2s ease-in-out;
+        }
+
+        .input-group input:focus::placeholder {
+            color: var(--primary-light);
+            transform: translateY(-2px);
+            transition: all 0.2s ease-in-out;
+        }
+
+        .input-group input {
+            animation: slide-in 0.3s ease-out;
+        }
+
+        .input-group button {
+            animation: slide-in 0.3s ease-out 0.1s;
+        }
+
+        .input-group button:active {
+            transform: scale(0.98);
+        }
+
+        @keyframes slide-in {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .input-group button {
+            padding: 10px 20px;
+            background-color: var(--primary);
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .input-group button:hover {
+            background-color: var(--primary-dark);
+        }
+
+        .input-group button:disabled {
+            background-color: var(--light-2);
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
     <div class="container">
+        <div class="username-form" id="username-form">
+            <h2>به چت روم خوش آمدید</h2>
+            <div class="input-group">
+                <input type="text" id="username-input" placeholder="نام کاربری خود را وارد کنید" maxlength="20">
+                <button id="save-username">تأیید</button>
+            </div>
+        </div>
+        
         <div class="sidebar">
             <div class="profile-section">
                 <h3><i class="fas fa-user-circle"></i> پروفایل کاربری</h3>
@@ -1040,6 +1095,8 @@
 
                 <div id="chat-messages"></div>
                 
+                <div id="upload-status"></div>
+                
                 <div id="preview-area">
                     <div class="preview-header">
                         <span><i class="fas fa-paperclip"></i> فایل‌های ضمیمه شده</span>
@@ -1082,6 +1139,6 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/openpgp/dist/openpgp.min.js"></script>
-    <script src="/script.js"></script>
+    <script src="/js/main.js"></script>
 </body>
 </html>

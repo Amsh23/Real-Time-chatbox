@@ -1,0 +1,39 @@
+# Render Blueprint File
+version: 1
+services:
+  - type: web
+    name: real-time-chatbox
+    env: node
+    plan: free
+    region: ohio # Choose a region closest to your users
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: NODE_OPTIONS
+        value: --max_old_space_size=512
+      - key: MONGODB_URI
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ADMIN_API_KEY
+        generateValue: true
+      - key: MAX_FILE_SIZE
+        value: 15728640 # 15MB
+      - key: ALLOWED_FILE_TYPES
+        value: jpeg,jpg,png,gif,mp4,webm,pdf,docx,xlsx
+      - key: MESSAGE_CACHE_SIZE
+        value: 50
+      - key: RATE_LIMIT_WINDOW
+        value: 60000 # 1 minute
+      - key: RATE_LIMIT_MAX_REQUESTS
+        value: 100
+    disk:
+      name: uploads
+      mountPath: /opt/render/project/src/public/uploads
+      sizeGB: 1

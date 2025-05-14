@@ -1,0 +1,1502 @@
+// Initialize socket connection
+const socket = io();
+
+// Initialize DOM elements
+const elements = {
+    usernameInput: document.getElementById('username-input'),
+    saveUsernameBtn: document.getElementById('save-username'),
+    messageInput: document.getElementById('message-input'),
+    sendButton: document.getElementById('send-button'),
+    chatMessages: document.getElementById('chat-messages'),
+    onlineCount: document.getElementById('online-count'),
+    createGroupBtn: document.getElementById('create-group'),
+    joinGroupBtn: document.getElementById('join-group'),
+    groupInfo: document.getElementById('current-group-info'),
+    groupName: document.getElementById('group-name'),
+    inviteCode: document.getElementById('invite-code'),
+    copyInviteBtn: document.getElementById('copy-invite'),
+    chatTitle: document.getElementById('chat-title'),
+    chatMessages: document.getElementById('chat-messages'),
+    messageInput: document.getElementById('message-input'),
+    sendButton: document.getElementById('send-button'),
+    attachBtn: document.getElementById('attach-btn'),
+    fileInput: document.getElementById('file-input'),
+    previewArea: document.getElementById('preview-area'),
+    filePreviews: document.getElementById('file-previews'),
+    clearPreview: document.getElementById('clear-preview'),
+    toggleThemeBtn: document.getElementById('toggle-theme'),
+    stickerBtn: document.getElementById('sticker-btn'),
+    stickerPanel: document.getElementById('sticker-panel'),
+    stickerTabs: document.querySelector('.sticker-tabs'),
+    stickerContent: document.querySelector('.sticker-content'),
+    searchInput: document.getElementById('search-input'),
+    searchBtn: document.getElementById('search-btn'),
+    searchResults: document.getElementById('search-results'),
+    closeSearch: document.getElementById('close-search'),
+    resultsContainer: document.getElementById('results-container')
+};
+
+// State management
+let currentUsername = localStorage.getItem('username') || '';
+let currentGroup = null;
+let attachments = [];
+
+// Toast notifications
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    
+    const container = document.createElement('div');
+    container.className = 'toast-container';
+    container.appendChild(toast);
+    document.body.appendChild(container);
+    
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => {
+            document.body.removeChild(container);
+        }, 300);
+    }, 3000);
+}
+
+// Initialize username on page load
+function initializeUsername() {
+    if (elements.usernameInput) {
+        elements.usernameInput.value = currentUsername;
+        if (currentUsername) {
+            socket.emit('set-username', currentUsername, (response) => {
+                if (response.error) {
+                    showToast(response.error, 'error');
+                } else {
+                    showToast('نام کاربری با موفقیت تنظیم شد', 'success');
+                }
+            });
+        }
+    }
+}
+
+// Event listeners for username
+if (elements.saveUsernameBtn) {
+    elements.saveUsernameBtn.addEventListener('click', handleSetUsername);
+}
+
+if (elements.usernameInput) {
+    elements.usernameInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            handleSetUsername();
+        }
+    });
+}
+let isLightMode = localStorage.getItem('theme') === 'light';
+let isLoadingMore = false;
+let hasMoreMessages = true;
+let offlineQueue = [];
+let lastMessageTimestamp = null;
+let isOnline = true;
+let typingTimeout = null;
+let activityTimeout = null;
+let searchTimeout = null;
+let searchInProgress = false;
+let editingMessageId = null;
+let replyingToMessage = null;
+let activeLightbox = null;
+
+// Add sticker packs data
+const STICKER_PACKS = [
+    {
+        id: 'emotions',
+        name: 'احساسات',
+        icon: '😊',
+        stickers: [
+            { id: 'happy', url: '/stickers/emotions/happy.png', emoji: '😊' },
+            { id: 'sad', url: '/stickers/emotions/sad.png', emoji: '😢' },
+            { id: 'love', url: '/stickers/emotions/love.png', emoji: '❤️' },
+            { id: 'laugh', url: '/stickers/emotions/laugh.png', emoji: '😂' },
+            { id: 'angry', url: '/stickers/emotions/angry.png', emoji: '😠' }
+        ]
+    },
+    {
+        id: 'animals',
+        name: 'حیوانات',
+        icon: '🐱',
+        stickers: [
+            { id: 'cat', url: '/stickers/animals/cat.png', emoji: '🐱' },
+            { id: 'dog', url: '/stickers/animals/dog.png', emoji: '🐶' },
+            { id: 'rabbit', url: '/stickers/animals/rabbit.png', emoji: '🐰' },
+            { id: 'bear', url: '/stickers/animals/bear.png', emoji: '🐻' }
+        ]
+    },
+    {
+        id: 'food',
+        name: 'غذاها',
+        icon: '🍕',
+        stickers: [
+            { id: 'pizza', url: '/stickers/food/pizza.png', emoji: '🍕' },
+            { id: 'burger', url: '/stickers/food/burger.png', emoji: '🍔' },
+            { id: 'icecream', url: '/stickers/food/icecream.png', emoji: '🍦' },
+            { id: 'cake', url: '/stickers/food/cake.png', emoji: '🎂' }
+        ]
+    },
+    {
+        id: 'activities',
+        name: 'فعالیت‌ها',
+        icon: '⚽',
+        stickers: [
+            { id: 'soccer', url: '/stickers/activities/soccer.png', emoji: '⚽' },
+            { id: 'basketball', url: '/stickers/activities/basketball.png', emoji: '🏀' },
+            { id: 'gaming', url: '/stickers/activities/gaming.png', emoji: '🎮' },
+            { id: 'music', url: '/stickers/activities/music.png', emoji: '🎵' }
+        ]
+    }
+];
+
+// File handling constants
+const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
+const ALLOWED_TYPES = new Set([
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'video/mp4',
+    'video/webm',
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+]);
+
+// File handling state
+let uploadQueue = new Set();
+
+// Initialize Intersection Observer for infinite scroll
+const scrollObserver = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting && !isLoadingMore && hasMoreMessages && currentGroup) {
+        loadMoreMessages();
+    }
+}, { threshold: 0.1 });
+
+// Add scroll sentinel element to chat messages
+const scrollSentinel = document.createElement('div');
+scrollSentinel.className = 'scroll-sentinel';
+elements.chatMessages.prepend(scrollSentinel);
+scrollObserver.observe(scrollSentinel);
+
+// Add lazy loading for images and videos
+const mediaObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            const media = entry.target;
+            if (media.dataset.src) {
+                media.src = media.dataset.src;
+                delete media.dataset.src;
+                mediaObserver.unobserve(media);
+            }
+        }
+    });
+}, { threshold: 0.1 });
+
+// Event Listeners
+elements.saveUsernameBtn?.addEventListener('click', handleSaveUsername);
+elements.createGroupBtn?.addEventListener('click', handleCreateGroup);
+elements.joinGroupBtn?.addEventListener('click', handleJoinGroup);
+elements.copyInviteBtn?.addEventListener('click', handleCopyInvite);
+elements.sendButton?.addEventListener('click', handleSendMessage);
+elements.messageInput?.addEventListener('keypress', handleMessageKeypress);
+elements.attachBtn?.addEventListener('click', () => elements.fileInput.click());
+elements.fileInput?.addEventListener('change', handleFileSelect);
+elements.clearPreview?.addEventListener('click', clearAttachments);
+elements.toggleThemeBtn?.addEventListener('click', toggleTheme);
+elements.stickerBtn?.addEventListener('click', toggleStickerPanel);
+elements.messageInput?.addEventListener('input', handleTyping);
+elements.searchInput?.addEventListener('input', () => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(handleSearch, 500);
+});
+elements.searchBtn?.addEventListener('click', () => {
+    clearTimeout(searchTimeout);
+    handleSearch();
+});
+elements.closeSearch?.addEventListener('click', hideSearchResults);
+
+// Message handling functions
+async function handleSendMessage() {
+    const text = elements.messageInput.value.trim();
+    if (text === '' && attachments.length === 0) {
+        showToast('لطفاً پیام یا فایل وارد کنید', 'error');
+        return;
+    }
+
+    const message = {
+        text,
+        groupId: currentGroup,
+        attachments: attachments,
+        timestamp: new Date()
+    };
+
+    if (!isOnline) {
+        offlineQueue.push(message);
+        showToast('پیام در صف ارسال قرار گرفت');
+        elements.messageInput.value = '';
+        clearAttachments();
+        return;
+    }
+
+    sendMessage(message);
+}
+
+function sendMessage(message) {
+    socket.emit('send-message', message, handleMessageResponse);
+
+    elements.messageInput.value = '';
+    clearAttachments();
+}
+
+function handleMessageKeypress(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSendMessage();
+    }
+}
+
+function handleMessageResponse(response) {
+    if (response.success) {
+        displayMessage(response.message, true);
+    } else {
+        showToast('خطا در ارسال پیام', 'error');
+    }
+}
+
+// User management functions
+function handleSaveUsername() {
+    const username = elements.usernameInput.value.trim();
+    if (!username) {
+        showToast('لطفاً نام کاربری معتبر وارد کنید', 'error');
+        return;
+    }
+
+    socket.emit('set-username', username, (response) => {
+        if (response.success) {
+            currentUsername = username;
+            localStorage.setItem('username', username);
+            showToast('نام کاربری با موفقیت ذخیره شد');
+        } else {
+            showToast(response.error || 'خطا در ذخیره نام کاربری', 'error');
+        }
+    });
+}
+
+// Group management functions
+function handleCreateGroup() {
+    if (!currentUsername) {
+        showToast('لطفا ابتدا نام کاربری خود را تنظیم کنید', 'error');
+        return;
+    }
+
+    const groupName = prompt('لطفاً نام گروه را وارد کنید:');
+    if (!groupName?.trim()) return;
+
+    socket.emit('create-group', groupName.trim(), (response) => {
+        if (response.success) {
+            currentGroup = response.group.id;
+            updateGroupInfo(response.group);
+            showToast('گروه با موفقیت ایجاد شد');
+            
+            // Update UI to show we're in a group
+            elements.chatTitle.textContent = `گروه: ${response.group.name}`;
+            elements.chatMessages.innerHTML = ''; // Clear previous messages
+        } else {
+            showToast(response.error || 'خطا در ایجاد گروه', 'error');
+        }
+    });
+}
+
+// بهبود عملکرد پیوستن به گروه
+async function handleJoinGroup() {
+    if (!currentUsername) {
+        showToast('لطفا ابتدا نام کاربری خود را تنظیم کنید', 'error');
+        return;
+    }
+
+    const inviteLink = prompt('لطفاً لینک یا کد دعوت گروه را وارد کنید:');
+    if (!inviteLink?.trim()) return;
+
+    try {
+        let groupId, inviteCode;
+        
+        // پشتیبانی از فرمت‌های مختلف لینک
+        if (inviteLink.includes('/api/groups/')) {
+            const parts = inviteLink.split('/');
+            groupId = parts[parts.length - 3];
+            inviteCode = parts[parts.length - 1];
+        } else if (inviteLink.includes('?join=')) {
+            const code = inviteLink.split('?join=')[1];
+            [groupId, inviteCode] = code.split(':');
+        } else {
+            [groupId, inviteCode] = inviteLink.split(':');
+        }
+
+        if (!groupId || !inviteCode) {
+            showToast('فرمت لینک دعوت نامعتبر است', 'error');
+            return;
+        }
+
+        // اول چک کردن اعتبار لینک
+        const response = await fetch(`/api/groups/${groupId}/join/${inviteCode}`);
+        const data = await response.json();
+        
+        if (!data.success) {
+            showToast(data.error || 'لینک دعوت نامعتبر است', 'error');
+            return;
+        }
+
+        // حالا به گروه بپیوندید
+        socket.emit('join-group', { groupId, inviteCode }, handleJoinGroupResponse);
+
+    } catch (err) {
+        showToast('خطا در پیوستن به گروه', 'error');
+        console.error('Error joining group:', err);
+    }
+}
+
+function handleJoinGroupResponse(response) {
+    if (response.success) {
+        currentGroup = response.group.id;
+        updateGroupInfo(response.group);
+        showToast(`به گروه ${response.group.name پیوستید}`);
+        
+        // Update UI
+        elements.chatTitle.textContent = `گروه: ${response.group.name}`;
+        elements.chatMessages.innerHTML = ''; // Clear previous messages
+        
+        // Load group messages
+        if (response.messages?.length > 0) {
+            loadGroupMessages(response.messages);
+        }
+
+        // Update members list if available
+        if (response.group.members?.length > 0) {
+            updateMembersList(response.group.members);
+        }
+    } else {
+        showToast(response.error || 'خطا در پیوستن به گروه', 'error');
+    }
+}
+
+// Handle file selection
+const handleFileSelect = async (event) => {
+    const files = Array.from(event.target.files);
+    let hasErrors = false;
+
+    // Validate files
+    const invalidFiles = files.filter(file => 
+        !ALLOWED_TYPES.has(file.type) || file.size > MAX_FILE_SIZE
+    );
+
+    if (invalidFiles.length > 0) {
+        invalidFiles.forEach(file => {
+            const reason = !ALLOWED_TYPES.has(file.type) ? 'type not allowed' : 'file too large';
+            showToast(`Cannot add ${file.name}: ${reason}`, 'error');
+        });
+        hasErrors = true;
+    }
+
+    // Filter valid files
+    const validFiles = files.filter(file => 
+        ALLOWED_TYPES.has(file.type) && file.size <= MAX_FILE_SIZE
+    );
+
+    if (validFiles.length === 0) return;
+
+    // Show upload progress UI
+    const progressContainer = document.createElement('div');
+    progressContainer.className = 'upload-progress-container';
+    document.body.appendChild(progressContainer);
+
+    // Upload files
+    const uploadPromises = validFiles.map(async file => {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        // Create progress indicator
+        const progressBar = document.createElement('div');
+        progressBar.className = 'upload-progress';
+        progressBar.innerHTML = '<div class="upload-progress-label">' + file.name + '</div>' +
+            '<div class="upload-progress-bar">' +
+            '<div class="upload-progress-fill"></div>' +
+            '</div>';
+        progressContainer.appendChild(progressBar);
+        const progressFill = progressBar.querySelector('.upload-progress-fill');
+
+        try {
+            uploadQueue.add(file.name);
+            updateUploadStatus();
+
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData,
+                onUploadProgress: (event) => {
+                    const percent = (event.loaded / event.total) * 100;
+                    progressFill.style.width = percent + '%';
+                }
+            });
+
+            if (!response.ok) throw new Error('Upload failed');
+            
+            const data = await response.json();
+            uploadQueue.delete(file.name);
+            updateUploadStatus();
+            
+            // Remove progress bar after success
+            progressBar.classList.add('success');
+            setTimeout(() => progressBar.remove(), 2000);
+
+            return data.file;
+
+        } catch (err) {
+            console.error('Upload error:', err);
+            uploadQueue.delete(file.name);
+            updateUploadStatus();
+            progressBar.classList.add('error');
+            setTimeout(() => progressBar.remove(), 3000);
+            showToast('Failed to upload ' + file.name, 'error');
+            return null;
+        }
+    });
+
+    try {
+        const uploadedFiles = (await Promise.all(uploadPromises)).filter(Boolean);
+        attachments = [...attachments, ...uploadedFiles];
+        updatePreview();
+    } finally {
+        // Clean up progress container when all uploads complete
+        setTimeout(() => {
+            if (progressContainer && progressContainer.children.length === 0) {
+                progressContainer.remove();
+            }
+        }, 3000);
+    }
+};
+
+// Update upload status indicator
+const updateUploadStatus = () => {
+    const uploadStatus = document.getElementById('upload-status');
+    if (uploadQueue.size > 0) {
+        uploadStatus.textContent = 'Uploading ' + uploadQueue.size + ' file' + 
+                                  (uploadQueue.size > 1 ? 's' : '') + '...';
+        uploadStatus.style.display = 'block';
+    } else {
+        uploadStatus.style.display = 'none';
+    }
+};
+
+// Update file preview area
+const updatePreview = () => {
+    const previewArea = document.getElementById('file-previews');
+    if (!previewArea) return;
+
+    previewArea.innerHTML = '';
+    
+    if (attachments.length === 0) {
+        previewArea.style.display = 'none';
+        return;
+    }
+
+    previewArea.style.display = 'grid';
+    
+    attachments.forEach((file, index) => {
+        const preview = document.createElement('div');
+        preview.className = 'file-preview';
+        
+        if (file.type.startsWith('image/')) {
+            preview.innerHTML = '<img src="' + (file.thumbnail || file.url) + 
+                               '" alt="' + file.originalName + 
+                               '" onclick="showLightbox(\'' + file.url + '\')">' +
+                               '<div class="file-info">' + formatFileSize(file.size) + '</div>' +
+                               '<button class="remove-file" onclick="removeAttachment(' + index + ')">×</button>';
+        } else {
+            const icon = getFileIcon(file.type);
+            preview.classList.add('document');
+            preview.innerHTML = '<i class="' + icon + '"></i>' +
+                               '<div class="file-name">' + file.originalName + '</div>' +
+                               '<div class="file-info">' + formatFileSize(file.size) + '</div>' +
+                               '<button class="remove-file" onclick="removeAttachment(' + index + ')">×</button>';
+        }
+
+        previewArea.appendChild(preview);
+    });
+};
+
+// Remove attachment
+const removeAttachment = (index) => {
+    attachments.splice(index, 1);
+    updatePreview();
+};
+
+// Format file size
+const formatFileSize = (bytes) => {
+    if (bytes < 1024) return bytes + 'B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + 'KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + 'MB';
+};
+
+// Get file icon based on MIME type
+const getFileIcon = (mimeType) => {
+    const icons = {
+        'application/pdf': 'fas fa-file-pdf',
+        'application/msword': 'fas fa-file-word',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'fas fa-file-word',
+        'video/mp4': 'fas fa-file-video',
+        'video/webm': 'fas fa-file-video',
+        'image/jpeg': 'fas fa-file-image',
+        'image/png': 'fas fa-file-image',
+        'image/gif': 'fas fa-file-image',
+        'default': 'fas fa-file'
+    };
+    return icons[mimeType] || icons.default;
+};
+
+// Media lightbox handling
+const showLightbox = (url) => {
+    const lightbox = document.createElement('div');
+    lightbox.className = 'media-lightbox active';
+    lightbox.innerHTML = '<img src="' + url + '" alt="Full size image">' +
+                        '<button class="close-lightbox" onclick="closeLightbox()">×</button>';
+    document.body.appendChild(lightbox);
+    activeLightbox = lightbox;
+
+    // Close on escape key
+    const handleKeyDown = (e) => {
+        if (e.key === 'Escape') {
+            closeLightbox();
+            document.removeEventListener('keydown', handleKeyDown);
+        }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+
+    // Close on outside click
+    lightbox.addEventListener('click', (e) => {
+        if (e.target === lightbox) {
+            closeLightbox();
+        }
+    });
+};
+
+const closeLightbox = () => {
+    if (activeLightbox) {
+        activeLightbox.remove();
+        activeLightbox = null;
+    }
+};
+
+// UI helper functions
+function updateGroupInfo(group) {
+    elements.groupInfo.style.display = 'block';
+    elements.groupName.textContent = 'گروه: ' + group.name;
+    elements.inviteCode.textContent = group.id + ':' + group.inviteCode;
+    elements.chatTitle.textContent = 'گروه: ' + group.name;
+}
+
+function clearAttachments() {
+    attachments = [];
+    elements.filePreviews.innerHTML = '';
+    elements.previewArea.style.display = 'none';
+    elements.fileInput.value = '';
+}
+
+function handleCopyInvite() {
+    const inviteText = elements.inviteCode.textContent;
+    const currentUrl = window.location.origin;
+    const inviteLink = currentUrl + '/api/groups/' + inviteText.split(':')[0] + '/join/' + inviteText.split(':')[1];
+    
+    navigator.clipboard.writeText(inviteLink)
+        .then(() => {
+            showToast('لینک دعوت کپی شد');
+            // ذخیره لینک در localStorage برای بازیابی بعدی
+            localStorage.setItem('lastInviteLink', inviteLink);
+        })
+        .catch(() => showToast('خطا در کپی لینک دعوت', 'error'));
+}
+
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    
+    const container = document.createElement('div');
+    container.className = 'toast-container';
+    container.appendChild(toast);
+    document.body.appendChild(container);
+    
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => {
+            document.body.removeChild(container);
+        }, 300);
+    }, 3000);
+}
+
+// Add toast styles
+const style = document.createElement('style');
+style.textContent = `
+    .toast-container {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+    }
+    
+    .toast {
+        padding: 12px 24px;
+        border-radius: 5px;
+        margin-bottom: 10px;
+        animation: slide-in 0.3s ease-out;
+        background-color: var(--dark-2);
+        color: var(--light);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    
+    .toast-success {
+        background-color: #4caf50;
+        color: white;
+    }
+    
+    .toast-error {
+        background-color: var(--danger);
+        color: white;
+    }
+    
+    .toast-info {
+        background-color: var(--primary);
+        color: white;
+    }
+    
+    .toast.fade-out {
+        animation: fade-out 0.3s ease-in forwards;
+    }
+    
+    @keyframes slide-in {
+        from {
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+    
+    @keyframes fade-out {
+        from {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+    }
+`;
+document.head.appendChild(style);
+
+// Theme management
+function toggleTheme() {
+    isLightMode = !isLightMode;
+    localStorage.setItem('theme', isLightMode ? 'light' : 'dark');
+    document.body.classList.toggle('light-mode', isLightMode);
+    elements.toggleThemeBtn.innerHTML = '<i class="fas fa-' + (isLightMode ? 'sun' : 'moon') + '"></i>';
+}
+
+// Initialize theme
+document.body.classList.toggle('light-mode', isLightMode);
+
+// Socket event listeners
+socket.on('connect', () => {
+    if (currentUsername) {
+        socket.emit('set-username', currentUsername);
+    }
+});
+
+socket.on('online-count', count => {
+    elements.onlineCount.textContent = count;
+});
+
+socket.on('new-message', message => {
+    displayMessage(message, message.sender === socket.id);
+});
+
+socket.on('user-joined', data => {
+    showToast(data.username + ' وارد شد');
+    if (data.groupId === currentGroup) {
+        updateMembersList(data.members);
+    }
+});
+
+socket.on('user-left', data => {
+    showToast(data.username + ' از گروه خارج شد');
+    if (data.groupId === currentGroup) {
+        updateMembersList(data.members);
+    }
+});
+
+socket.on('group-updated', data => {
+    if (data.id === currentGroup) {
+        updateMembersList(data.members);
+    }
+});
+
+socket.on('user-disconnected', data => {
+    showToast(data.username + ' خارج شد');
+});
+
+function displayMessage(message, isMyMessage = false) {
+    const messageElement = createMessageElement(message, isMyMessage);
+    elements.chatMessages.appendChild(messageElement);
+    elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+}
+
+function createMessageElement(message, isMyMessage = false) {
+    const messageElement = document.createElement('div');
+    messageElement.className = 'message ' + (isMyMessage ? 'my-message' : 'other-message');
+    messageElement.dataset.id = message.id;
+
+    // Message actions menu
+    const actionsHTML = isMyMessage ? 
+        '<div class="message-actions">' +
+            '<button class="action-btn edit-btn" onclick="handleEditClick(\'' + message.id + '\')">' +
+                '<i class="fas fa-edit"></i>' +
+            '</button>' +
+            '<button class="action-btn delete-btn" onclick="handleDeleteClick(\'' + message.id + '\')">' +
+                '<i class="fas fa-trash"></i>' +
+            '</button>' +
+            '<button class="action-btn reply-btn" onclick="handleReplyClick(\'' + message.id + '\')">' +
+                '<i class="fas fa-reply"></i>' +
+            '</button>' +
+            '<button class="action-btn pin-btn" onclick="handlePinClick(\'' + message.id + '\')">' +
+                '<i class="fas fa-thumbtack"></i>' +
+            '</button>' +
+        '</div>' : 
+        '<div class="message-actions">' +
+            '<button class="action-btn reply-btn" onclick="handleReplyClick(\'' + message.id + '\')">' +
+                '<i class="fas fa-reply"></i>' +
+            '</button>' +
+            '<button class="action-btn pin-btn" onclick="handlePinClick(\'' + message.id + '\')">' +
+                '<i class="fas fa-thumbtack"></i>' +
+            '</button>' +
+        '</div>';
+
+    // Reply info if this is a reply
+    let replyHTML = '';
+    if (message.metadata?.replyTo) {
+        replyHTML = '<div class="reply-info">' +
+            '<i class="fas fa-reply"></i>' +
+            '<span class="reply-to">' + message.metadata.replyTo.username + ':</span>' +
+            '<span class="reply-text">' + message.metadata.replyTo.message + '</span>' +
+        '</div>';
+    }
+
+    // Pinned indicator
+    let pinnedHTML = '';
+    if (message.metadata?.pinned) {
+        pinnedHTML = '<div class="pinned-indicator">' +
+            '<i class="fas fa-thumbtack"></i>' +
+            '<span>پین شده توسط ' + message.metadata.pinnedBy + '</span>';
+    }
+
+    // Edited indicator
+    const editedHTML = message.metadata?.edited ? 
+        '<span class="edited-indicator">(ویرایش شده)</span>' : '';
+
+    // Handle attachments with lazy loading
+    let attachmentsHTML = '';
+    if (message.attachments?.length > 0) {
+        attachmentsHTML = message.attachments.map(att => {
+            if (att.type.startsWith('image/')) {
+                const placeholder = 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\'/%3E';
+                return '<div class="attachment image">' +
+                    '<img src="' + placeholder + '" data-src="' + att.url + '" alt="تصویر" ' +
+                    'loading="lazy" class="lazy-media">' +
+                    '</div>';
+            } else if (att.type.startsWith('video/')) {
+                return '<div class="attachment video">' +
+                    '<video controls preload="none" data-src="' + att.url + '" ' +
+                    'poster="/images/video-placeholder.png" class="lazy-media">' +
+                    '<source type="' + att.type + '" data-src="' + att.url + '">' +
+                    '</video>' +
+                    '</div>';
+            }
+            return '<div class="attachment file">' +
+                '<a href="' + att.url + '" target="_blank" download>' +
+                '<i class="fas ' + getFileIcon(att.type) + '"></i>' +
+                '<span>' + att.originalName + '</span>' +
+                '</a>' +
+                '</div>';
+        }).join('');
+    }
+
+    let reactionsHTML = '';
+    if (message.reactions && message.reactions.length > 0) {
+        reactionsHTML = '<div class="message-reactions">';
+        message.reactions.forEach(reaction => {
+            reactionsHTML += '<button class="reaction-btn" onclick="addReaction(\'' + 
+                            message.id + '\', \'' + reaction.emoji + '\')">' +
+                            reaction.emoji + ' ' + reaction.users.length + '</button>';
+        });
+        reactionsHTML += '</div>';
+    }
+
+    messageElement.innerHTML = 
+        pinnedHTML +
+        replyHTML +
+        '<div class="message-header">' +
+            '<strong>' + (message.username || 'ناشناس') + '</strong>' +
+            actionsHTML +
+        '</div>' +
+        attachmentsHTML +
+        (message.text ? '<div class="message-text">' + message.text + '</div>' : '') +
+        (message.sticker ? '<div class="sticker-message"><img src="' + message.sticker.url + '" alt="استیکر"></div>' : '') +
+        reactionsHTML +
+        '<div class="message-footer">' +
+            '<small>' + new Date(message.timestamp).toLocaleTimeString('fa-IR') + '</small>' +
+            editedHTML +
+        '</div>';
+
+    // Observe lazy-loaded media
+    messageElement.querySelectorAll('.lazy-media').forEach(media => {
+        mediaObserver.observe(media);
+    });
+
+    return messageElement;
+}
+
+// Message editing handlers
+function handleEditClick(messageId) {
+    const messageEl = document.querySelector('.message[data-id="' + messageId + '"]');
+    const textEl = messageEl.querySelector('.message-text');
+    if (!textEl) return;
+
+    const originalText = textEl.textContent;
+    textEl.innerHTML = 
+        '<div class="edit-container">' +
+            '<textarea class="edit-input">' + originalText + '</textarea>' +
+            '<div class="edit-actions">' +
+                '<button onclick="saveEdit(\'' + messageId + '\')">' +
+                    '<i class="fas fa-check"></i>' +
+                '</button>' +
+                '<button onclick="cancelEdit(\'' + messageId + '\', \'' + originalText + '\')">' +
+                    '<i class="fas fa-times"></i>' +
+                '</button>' +
+            '</div>' +
+        '</div>';
+}
+
+function saveEdit(messageId) {
+    const messageEl = document.querySelector('.message[data-id="' + messageId + '"]');
+    const editInput = messageEl.querySelector('.edit-input');
+    if (!editInput) return;
+
+    const newText = editInput.value.trim();
+    if (!newText) return;
+
+    socket.emit('edit-message', {
+        messageId,
+        newText,
+        groupId: currentGroup
+    }, response => {
+        if (!response.success) {
+            showToast(response.error || 'خطا در ویرایش پیام', 'error');
+        }
+    });
+}
+
+function cancelEdit(messageId, originalText) {
+    const messageEl = document.querySelector('.message[data-id="' + messageId + '"]');
+    const textEl = messageEl.querySelector('.message-text');
+    textEl.innerHTML = originalText;
+}
+
+// Message delete handler
+function handleDeleteClick(messageId) {
+    if (confirm('آیا از حذف این پیام مطمئن هستید؟')) {
+        socket.emit('delete-message', {
+            messageId,
+            groupId: currentGroup
+        }, response => {
+            if (!response.success) {
+                showToast(response.error || 'خطا در حذف پیام', 'error');
+            }
+        });
+    }
+}
+
+// Message reply handler
+function handleReplyClick(messageId) {
+    const messageEl = document.querySelector('.message[data-id="' + messageId + '"]');
+    const messageText = messageEl.querySelector('.message-text')?.textContent || '';
+    const username = messageEl.querySelector('strong').textContent;
+
+    elements.messageInput.dataset.replyTo = messageId;
+    showReplyPreview(username, messageText);
+}
+
+function showReplyPreview(username, text) {
+    const preview = document.createElement('div');
+    preview.className = 'reply-preview';
+    preview.innerHTML = 
+        '<div class="reply-content">' +
+            '<i class="fas fa-reply"></i>' +
+            '<span class="reply-to">' + username + ':</span>' +
+            '<span class="reply-text">' + text.substring(0, 50) + (text.length > 50 ? '...' : '') + '</span>' +
+        '</div>' +
+        '<button onclick="cancelReply()">' +
+            '<i class="fas fa-times"></i>' +
+        '</button>';
+
+    const inputArea = elements.messageInput.parentElement;
+    inputArea.insertBefore(preview, elements.messageInput);
+}
+
+function cancelReply() {
+    delete elements.messageInput.dataset.replyTo;
+    document.querySelector('.reply-preview')?.remove();
+}
+
+// Message pin handler
+function handlePinClick(messageId) {
+    socket.emit('pin-message', {
+        messageId,
+        groupId: currentGroup
+    }, response => {
+        if (!response.success) {
+            showToast(response.error || 'خطا در پین کردن پیام', 'error');
+        }
+    });
+}
+
+// Add socket listeners for new message events
+socket.on('message-edited', data => {
+    const messageEl = document.querySelector('.message[data-id="' + data.messageId + '"]');
+    if (messageEl) {
+        const textEl = messageEl.querySelector('.message-text');
+        if (textEl) {
+            textEl.innerHTML = data.newText;
+            messageEl.querySelector('.message-footer').innerHTML += 
+                '<span class="edited-indicator">(ویرایش شده)</span>';
+        }
+    }
+});
+
+socket.on('message-deleted', data => {
+    const messageEl = document.querySelector('.message[data-id="' + data.messageId + '"]');
+    if (messageEl) {
+        messageEl.remove();
+    }
+});
+
+socket.on('message-pinned', data => {
+    const messageEl = document.querySelector('.message[data-id="' + data.messageId + '"]');
+    if (messageEl) {
+        const pinnedIndicator = document.createElement('div');
+        pinnedIndicator.className = 'pinned-indicator';
+        pinnedIndicator.innerHTML = 
+            '<i class="fas fa-thumbtack"></i>' +
+            '<span>پین شده توسط ' + data.pinnedBy + '</span>';
+        messageEl.insertBefore(pinnedIndicator, messageEl.firstChild);
+    }
+});
+
+function loadGroupMessages(messages) {
+    elements.chatMessages.innerHTML = '';
+    messages.forEach(msg => {
+        displayMessage(msg, msg.sender === socket.id);
+    });
+}
+
+// Initialize
+if (currentUsername) {
+    elements.usernameInput.value = currentUsername;
+}
+
+// URL params handling
+const urlParams = new URLSearchParams(window.location.search);
+const joinCode = urlParams.get('join');
+if (joinCode) {
+    const [groupId, inviteCode] = joinCode.split(':');
+    if (groupId && inviteCode) {
+        socket.emit('join-group', { groupId, inviteCode });
+    }
+}
+
+function updateMembersList(members) {
+    // Create members list if it doesn't exist
+    if (!elements.membersList) {
+        elements.membersList = document.createElement('div');
+        elements.membersList.className = 'members-list';
+        elements.groupInfo.appendChild(elements.membersList);
+    }
+
+    elements.membersList.innerHTML = 
+        '<h4>اعضای گروه (' + members.length + ')</h4>' +
+        members.map(username => 
+            '<div class="member">' +
+                '<i class="fas fa-user"></i>' +
+                username +
+            '</div>'
+        ).join('');
+}
+
+function toggleStickerPanel() {
+    const isVisible = elements.stickerPanel.style.display === 'flex';
+    elements.stickerPanel.style.display = isVisible ? 'none' : 'flex';
+    
+    if (!isVisible && !elements.stickerPanel.dataset.initialized) {
+        initializeStickerPanel();
+    }
+}
+
+function initializeStickerPanel() {
+    // Create tabs
+    elements.stickerTabs.innerHTML = STICKER_PACKS.map(pack => 
+        '<div class="sticker-tab" data-pack="' + pack.id + '">' +
+            pack.icon +
+        '</div>'
+    ).join('');
+
+    // Add tab click handlers
+    elements.stickerTabs.querySelectorAll('.sticker-tab').forEach(tab => {
+        tab.addEventListener('click', () => showStickerPack(tab.dataset.pack));
+    });
+
+    // Show first pack
+    showStickerPack(STICKER_PACKS[0].id);
+    elements.stickerPanel.dataset.initialized = 'true';
+}
+
+function showStickerPack(packId) {
+    const pack = STICKER_PACKS.find(p => p.id === packId);
+    if (!pack) return;
+
+    elements.stickerContent.innerHTML = pack.stickers.map(sticker => 
+        '<div class="sticker-item" data-pack="' + pack.id + '" data-sticker="' + sticker.id + '">' +
+            '<img src="' + sticker.url + '" alt="' + sticker.emoji + '">' +
+        '</div>'
+    ).join('');
+
+    elements.stickerContent.querySelectorAll('.sticker-item').forEach(item => {
+        item.addEventListener('click', () => sendSticker(item.dataset.pack, item.dataset.sticker));
+    });
+}
+
+function sendSticker(packId, stickerId) {
+    if (!currentGroup) {
+        showToast('لطفا ابتدا وارد یک گروه شوید', 'error');
+        return;
+    }
+
+    socket.emit('send-sticker', {
+        packId,
+        stickerId,
+        groupId: currentGroup
+    }, response => {
+        if (!response.success) {
+            showToast(response.error || 'خطا در ارسال استیکر', 'error');
+        }
+    });
+
+    toggleStickerPanel();
+}
+
+function addReaction(messageId, emoji) {
+    socket.emit('add-reaction', {
+        messageId,
+        emoji,
+        groupId: currentGroup
+    }, response => {
+        if (!response.success) {
+            showToast(response.error || 'خطا در افزودن واکنش', 'error');
+        }
+    });
+}
+
+function handleTyping() {
+    if (!currentGroup) return;
+
+    socket.emit('typing', {
+        groupId: currentGroup,
+        isTyping: true
+    });
+
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => {
+        socket.emit('typing', {
+            groupId: currentGroup,
+            isTyping: false
+        });
+    }, 1000);
+}
+
+// Add socket event listeners
+socket.on('message-reacted', data => {
+    const messageEl = document.querySelector('.message[data-id="' + data.messageId + '"]');
+    if (messageEl) {
+        const reactionsEl = messageEl.querySelector('.message-reactions');
+        if (data.reactions.length > 0) {
+            reactionsEl.innerHTML = data.reactions.map(reaction => 
+                '<button class="reaction-btn" onclick="addReaction(\'' + data.messageId + 
+                '\', \'' + reaction.emoji + '\')">' + reaction.emoji + ' ' + 
+                reaction.users.length + '</button>'
+            ).join('');
+        }
+    }
+});
+
+socket.on('user-typing', data => {
+    const typingEl = document.querySelector('.typing-indicator') || 
+                    document.createElement('div');
+    typingEl.className = 'typing-indicator';
+    
+    if (data.isTyping) {
+        typingEl.textContent = data.username + ' در حال نوشتن...';
+        elements.chatMessages.appendChild(typingEl);
+    } else {
+        typingEl.remove();
+    }
+});
+
+async function loadMoreMessages() {
+    if (!currentGroup || isLoadingMore || !hasMoreMessages) return;
+    
+    isLoadingMore = true;
+    showLoadingIndicator();
+
+    socket.emit('load-more-messages', {
+        groupId: currentGroup,
+        before: lastMessageTimestamp
+    }, handleLoadMoreResponse);
+}
+
+function handleLoadMoreResponse(response) {
+    isLoadingMore = false;
+    hideLoadingIndicator();
+
+    if (response.success) {
+        if (response.messages.length === 0) {
+            hasMoreMessages = false;
+            return;
+        }
+
+        // Insert messages at the top
+        const fragment = document.createDocumentFragment();
+        response.messages.forEach(msg => {
+            const messageEl = createMessageElement(msg, msg.sender === socket.id);
+            fragment.appendChild(messageEl);
+        });
+
+        // Update last message timestamp for pagination
+        const oldestMessage = response.messages[response.messages.length - 1];
+        lastMessageTimestamp = oldestMessage.timestamp;
+
+        // Preserve scroll position when adding messages
+        const firstMsg = elements.chatMessages.firstElementChild;
+        const oldHeight = elements.chatMessages.scrollHeight;
+        
+        elements.chatMessages.insertBefore(fragment, firstMsg);
+        
+        const newHeight = elements.chatMessages.scrollHeight;
+        elements.chatMessages.scrollTop = newHeight - oldHeight;
+    }
+}
+
+// Offline support
+window.addEventListener('online', handleOnlineStatus);
+window.addEventListener('offline', handleOnlineStatus);
+
+function handleOnlineStatus(event) {
+    isOnline = event.type === 'online';
+    showOnlineStatus();
+
+    if (isOnline) {
+        socket.connect();
+        processOfflineQueue();
+    }
+}
+
+function showOnlineStatus() {
+    const status = document.createElement('div');
+    status.className = 'connection-status ' + (isOnline ? 'online' : 'offline');
+    status.textContent = isOnline ? 'اتصال برقرار شد' : 'اتصال قطع است';
+    document.body.appendChild(status);
+
+    setTimeout(() => status.remove(), 3000);
+}
+
+function processOfflineQueue() {
+    while (offlineQueue.length > 0) {
+        const message = offlineQueue.shift();
+        sendMessage(message);
+    }
+}
+
+// Helper functions
+function showLoadingIndicator() {
+    const loader = document.createElement('div');
+    loader.className = 'loading-indicator';
+    loader.innerHTML = '<i class="fas fa-spinner fa-spin"></i> در حال بارگذاری...';
+    elements.chatMessages.insertBefore(loader, elements.chatMessages.firstChild);
+}
+
+function hideLoadingIndicator() {
+    const loader = document.querySelector('.loading-indicator');
+    if (loader) loader.remove();
+}
+
+// Search handlers
+function handleSearch() {
+    const query = elements.searchInput.value.trim();
+    
+    if (query.length < 2) {
+        hideSearchResults();
+        return;
+    }
+
+    if (searchInProgress || !currentGroup) return;
+    searchInProgress = true;
+
+    elements.searchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    
+    socket.emit('search-messages', {
+        query,
+        groupId: currentGroup
+    }, function(response) {
+        searchInProgress = false;
+        elements.searchBtn.innerHTML = '<i class="fas fa-search"></i>';
+
+        if (!response.success) {
+            showToast(response.error || 'Search failed');
+            return;
+        }
+
+        displaySearchResults(response.messages);
+    });
+}
+
+function displaySearchResults(messages) {
+    if (!elements.resultsContainer || !messages || !messages.length) {
+        elements.resultsContainer.innerHTML = '<div class="no-results">No messages found</div>';
+        showSearchResults();
+        return;
+    }
+
+    let html = '';
+    for (let msg of messages) {
+        const preview = msg.text 
+            ? (msg.text.length > 100 ? msg.text.substr(0, 100) + '...' : msg.text)
+            : (msg.attachments && msg.attachments.length ? 'Media message' : '');
+            
+        html += '<div class="search-result" onclick="scrollToMessage(\'' + msg.id + '\')">';
+        html += '<div class="username">' + (msg.username || 'Unknown') + '</div>';
+        html += '<div class="message-preview">' + preview + '</div>';
+        html += '<div class="timestamp">' + formatDate(msg.timestamp) + '</div>';
+        html += '</div>';
+    }
+
+    elements.resultsContainer.innerHTML = html;
+    showSearchResults();
+}
+
+function showSearchResults() {
+    if (elements.searchResults) {
+        elements.searchResults.style.display = 'block';
+    }
+}
+
+function hideSearchResults() {
+    if (elements.searchResults) {
+        elements.searchResults.style.display = 'none';
+    }
+}
+
+function scrollToMessage(messageId) {
+    if (!messageId) return;
+    const messageEl = document.querySelector('.message[data-id="' + messageId + '"]');
+    if (messageEl) {
+        messageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        messageEl.classList.add('highlighted');
+        setTimeout(() => messageEl.classList.remove('highlighted'), 2000);
+        hideSearchResults();
+    }
+}
+
+function formatDate(timestamp) {
+    if (!timestamp) return '';
+    return new Date(timestamp).toLocaleString();
+}
+
+// Handle clicks outside search results
+document.addEventListener('click', (e) => {
+    if (elements.searchResults && elements.searchInput && elements.searchBtn) {
+        const isClickInside = elements.searchResults.contains(e.target) || 
+                         elements.searchInput.contains(e.target) || 
+                         elements.searchBtn.contains(e.target);
+        
+        if (!isClickInside) {
+            hideSearchResults();
+        }
+    }
+});
+
+// Add to existing socket event handlers 
+socket.on('search-results', handleSearchResults);
+
+// Update user status display
+const updateUserStatus = (groupMembers) => {
+    const membersList = document.getElementById('group-members-list');
+    if (!membersList) return;
+
+    membersList.innerHTML = '';
+    groupMembers.forEach(member => {
+        const memberElement = document.createElement('div');
+        memberElement.className = 'member-item status-' + member.status;
+        memberElement.innerHTML = 
+            '<span class="status-indicator"></span>' +
+            '<span class="member-username">' + member.username + '</span>' +
+            (member.status === 'offline' ? 
+                '<span class="last-seen">Last seen ' + formatLastSeen(member.lastSeen) + '</span>' : 
+                '');
+        membersList.appendChild(memberElement);
+    });
+
+    // Update online count
+    const onlineCount = groupMembers.filter(m => m.status === 'online').length;
+    elements.onlineCount.textContent = onlineCount + ' online';
+};
+
+// Format last seen time
+const formatLastSeen = (timestamp) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now - date;
+
+    if (diff < 60000) { // less than 1 minute
+        return 'just now';
+    } else if (diff < 3600000) { // less than 1 hour
+        const minutes = Math.floor(diff / 60000);
+        return minutes + 'm ago';
+    } else if (diff < 86400000) { // less than 1 day
+        const hours = Math.floor(diff / 3600000);
+        return hours + 'h ago';
+    } else {
+        return date.toLocaleDateString();
+    }
+};
+
+// Event listeners for activity tracking
+document.addEventListener('mousemove', trackUserActivity);
+document.addEventListener('keypress', trackUserActivity);
+document.addEventListener('click', trackUserActivity);
+
+// Track user activity with debounce
+function trackUserActivity() {
+    clearTimeout(activityTimeout);
+    activityTimeout = setTimeout(() => {
+        socket.emit('activity');
+    }, 1000);
+}
+
+// Update typing indicators display
+const updateTypingDisplay = (typingUsers) => {
+    const typingDisplay = document.getElementById('typing-indicator') || 
+        (() => {
+            const div = document.createElement('div');
+            div.id = 'typing-indicator';
+            div.className = 'typing-indicator';
+            elements.chatMessages.appendChild(div);
+            return div;
+        })();
+
+    if (typingUsers.length === 0) {
+        typingDisplay.style.display = 'none';
+        return;
+    }
+
+    let text = '';
+    if (typingUsers.length === 1) {
+        text = typingUsers[0].username + ' is typing...';
+    } else if (typingUsers.length === 2) {
+        text = typingUsers[0].username + ' and ' + typingUsers[1].username + ' are typing...';
+    } else {
+        text = 'Several people are typing...';
+    }
+
+    typingDisplay.textContent = text;
+    typingDisplay.style.display = 'block';
+};
+
+// Socket event listeners for status updates
+socket.on('typing-status', updateTypingDisplay);
+socket.on('user-status-update', updateUserStatus);
+
+// Close lightbox on escape key
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && activeLightbox) {
+        closeLightbox();
+    }
+});
+
+// Username handling
+function initializeUsername() {
+    if (elements.usernameInput) {
+        elements.usernameInput.value = currentUsername;
+        if (currentUsername) {
+            socket.emit('set-username', currentUsername, (response) => {
+                if (response.error) {
+                    showToast(response.error, 'error');
+                } else {
+                    showToast('نام کاربری با موفقیت تنظیم شد', 'success');
+                }
+            });
+        }
+    }
+}
+
+function handleSetUsername() {
+    const username = elements.usernameInput.value.trim();
+    if (!username) {
+        showToast('لطفاً نام کاربری را وارد کنید', 'error');
+        return;
+    }
+    
+    socket.emit('set-username', username, (response) => {
+        if (response.error) {
+            showToast(response.error, 'error');
+        } else {
+            currentUsername = username;
+            localStorage.setItem('username', username);
+            showToast('نام کاربری با موفقیت تنظیم شد', 'success');
+            
+            // Enable chat functionality
+            if (elements.messageInput) {
+                elements.messageInput.disabled = false;
+            }
+            if (elements.sendButton) {
+                elements.sendButton.disabled = false;
+            }
+        }
+    });
+}
+
+// Event listeners for username
+if (elements.saveUsernameBtn) {
+    elements.saveUsernameBtn.addEventListener('click', handleSetUsername);
+}
+
+if (elements.usernameInput) {
+    elements.usernameInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            handleSetUsername();
+        }
+    });
+}
+
+// Initialize username on page load
+initializeUsername();

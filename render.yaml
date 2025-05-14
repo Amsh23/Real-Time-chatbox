@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: real-time-chatbox
+    env: node
+    region: oregon  # Choose the region closest to your users
+    plan: free
+    buildCommand: npm install --production
+    startCommand: npm start
+    autoDeploy: true
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_OPTIONS
+        value: --max_old_space_size=512
+      - key: PORT
+        fromService:
+          type: web
+          name: real-time-chatbox
+          envVarName: PORT
+      - key: MONGODB_URI
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: ADMIN_API_KEY
+        generateValue: true
+    disk:
+      name: uploads
+      mountPath: /opt/render/project/src/public/uploads
+      sizeGB: 1

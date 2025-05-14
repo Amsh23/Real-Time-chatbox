@@ -21,8 +21,6 @@
 - Removed duplicate function and variable declarations
 - Standardized template literals and string formatting throughout the codebase
 - Improved code organization and readability
-- Enhanced development mode with graceful MongoDB connection handling
-- Added SKIP_MONGODB=true option for testing without a database
 
 ## ⚡ Quick Setup (Run Locally)
 
@@ -50,21 +48,6 @@ MONGODB_URI=mongodb://127.0.0.1:27017/chatapp
 ```bash
 npm start
 ```
-
-### Running Without MongoDB
-If you don't have MongoDB installed or just want to test the frontend features:
-
-1. Add this to your `.env` file:
-```
-SKIP_MONGODB=true
-```
-
-2. Start the server:
-```bash
-npm start
-```
-
-This will run the application with limited functionality, allowing you to test the UI and real-time features without a database connection.
 
 ✅ Open `http://localhost:3000` in your browser and start chatting! 💬
 

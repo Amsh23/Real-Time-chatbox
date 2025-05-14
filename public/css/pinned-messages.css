@@ -1,0 +1,100 @@
+.pinned-messages {
+    background: var(--chat-background);
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    display: none;
+}
+
+.pinned-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.pinned-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.pinned-messages-list {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 0.5rem;
+}
+
+.pinned-message {
+    background: var(--message-background);
+    border-radius: 0.5rem;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.pinned-message-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.25rem;
+    font-size: 0.875rem;
+}
+
+.pinned-message-username {
+    font-weight: bold;
+    color: var(--accent-color);
+}
+
+.pinned-message-time {
+    color: var(--text-muted);
+}
+
+.pinned-message-text {
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.pinned-message-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+}
+
+.goto-message-btn,
+.unpin-message-btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    border-radius: 0.25rem;
+    border: 1px solid var(--border-color);
+    background: var(--button-background);
+    color: var(--text-color);
+    cursor: pointer;
+}
+
+.goto-message-btn:hover,
+.unpin-message-btn:hover {
+    background: var(--button-hover-background);
+}
+
+.pin-badge {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 0.5rem;
+    color: var(--accent-color);
+    cursor: help;
+}
+
+.message.pinned {
+    border-left: 3px solid var(--accent-color);
+}
+
+.message.highlight {
+    animation: highlight-pulse 2s ease-in-out;
+}
+
+@keyframes highlight-pulse {
+    0% { background: var(--message-background); }
+    50% { background: var(--highlight-background); }
+    100% { background: var(--message-background); }
+}

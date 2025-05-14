@@ -1,5 +1,7 @@
 const os = require('os');
 const mongoose = require('mongoose');
+const logger = require('./logger');
+const config = require('../config');
 
 class SystemMonitor {
     constructor() {
@@ -13,8 +15,68 @@ class SystemMonitor {
             lastError: null,
             memoryUsage: {},
             cpuUsage: {},
-            dbStats: {}
+            dbStats: {},
+            socketStats: {
+                connected: 0,
+                disconnected: 0,
+                reconnectAttempts: 0,
+                heartbeats: 0
+            },
+            renderStats: {
+                isFreeInstance: config.isProduction
+            }
         };
+        
+        // Setup memory monitoring for Render free tier
+        if (config.isProduction) {
+            this.setupMemoryMonitoring();
+        }
+    }
+    
+    setupMemoryMonitoring() {
+        // Check memory usage every minute
+        this.memoryMonitorInterval = setInterval(() => {
+            try {
+                const memUsage = process.memoryUsage();
+                const heapUsedMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+                const heapTotalMB = Math.round(memUsage.heapTotal / 1024 / 1024);
+                const rssMB = Math.round(memUsage.rss / 1024 / 1024);
+                
+                // Calculate percentages
+                const heapPercentage = Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100);
+                
+                // Update stats
+                this.stats.memoryUsage = {
+                    heapUsed: heapUsedMB,
+                    heapTotal: heapTotalMB,
+                    rss: rssMB,
+                    external: Math.round(memUsage.external / 1024 / 1024),
+                    percentage: heapPercentage
+                };
+                
+                // Alert if memory usage is high (over 80%)
+                if (heapPercentage > 80) {
+                    logger.warn(`High memory usage: ${heapPercentage}% (${heapUsedMB}MB/${heapTotalMB}MB)`);
+                    
+                    // If extremely high (over 90%), try to free memory
+                    if (heapPercentage > 90) {
+                        logger.error(`Critical memory usage: ${heapPercentage}% (${heapUsedMB}MB/${heapTotalMB}MB)`);
+                        
+                        if (global.gc) {
+                            logger.info('Forcing garbage collection');
+                            global.gc();
+                        }
+                    }
+                }
+            } catch (err) {
+                logger.error('Error in memory monitoring:', err);
+            }
+        }, 60000); // Check every minute
+    }
+
+    // Track socket heartbeats
+    trackHeartbeat(socketId) {
+        this.stats.socketStats.heartbeats++;
     }
 
     // Track new connection

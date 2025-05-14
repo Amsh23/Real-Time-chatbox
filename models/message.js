@@ -1,7 +1,8 @@
 const mongoose = require('mongoose');
+const { v4: uuidv4 } = require('uuid');
 
 const MessageSchema = new mongoose.Schema({
-    id: { type: String, required: true, unique: true, index: true },
+    id: { type: String, required: true, unique: true, default: uuidv4 },
     text: {
         type: String,
         maxlength: [parseInt(process.env.MAX_MESSAGE_LENGTH) || 2000, 'پیام نمی‌تواند بیشتر از {MAXLENGTH} کاراکتر باشد']
@@ -16,7 +17,13 @@ const MessageSchema = new mongoose.Schema({
         url: String,
         type: String,
         originalName: String,
-        size: Number
+        size: Number,
+        metadata: {
+            width: Number,
+            height: Number,
+            duration: Number,
+            thumbnail: String
+        }
     }],
     sticker: {
         packId: String,
@@ -35,11 +42,10 @@ const MessageSchema = new mongoose.Schema({
     },
     metadata: {
         clientId: String,
-        replyTo: { 
-            type: String, 
-            ref: 'Message',
+        replyTo: {
+            messageId: { type: String, ref: 'Message' },
             message: String,
-            username: String 
+            username: String
         },
         forwarded: Boolean,
         edited: { type: Boolean, default: false },
@@ -49,7 +55,8 @@ const MessageSchema = new mongoose.Schema({
         }],
         pinned: { type: Boolean, default: false },
         pinnedBy: String,
-        pinnedAt: Date
+        pinnedAt: Date,
+        readAt: { type: Map, of: Date }
     }
 });
 
@@ -57,6 +64,7 @@ const MessageSchema = new mongoose.Schema({
 MessageSchema.index({ groupId: 1, timestamp: -1 });
 MessageSchema.index({ sender: 1, status: 1 });
 MessageSchema.index({ groupId: 1, readBy: 1 });
+MessageSchema.index({ 'text': 'text', 'username': 'text' });
 
 // Instance methods
 MessageSchema.methods.markAsDelivered = function() {
@@ -101,24 +109,33 @@ MessageSchema.methods.editText = function(newText) {
     return this.save();
 };
 
-// Static methods
-MessageSchema.statics.getGroupMessages = function(groupId, options = {}) {
-    const query = this.find({ groupId })
-        .sort({ timestamp: options.sort || -1 });
-    
-    if (options.limit) {
-        query.limit(options.limit);
+MessageSchema.methods.markReadBy = async function(userId) {
+    if (!this.metadata.readBy.includes(userId)) {
+        this.metadata.readBy.push(userId);
+        this.metadata.readAt.set(userId, new Date());
+        await this.save();
     }
-    
-    if (options.before) {
-        query.where('timestamp').lt(options.before);
-    }
-    
-    if (options.after) {
-        query.where('timestamp').gt(options.after);
-    }
+};
 
-    return query.lean();
+// Static methods
+MessageSchema.statics.getGroupMessages = async function(groupId, options = {}) {
+    const {
+        before = new Date(),
+        limit = 50,
+        sort = -1,
+        filter = {}
+    } = options;
+
+    const query = {
+        groupId,
+        timestamp: { $lt: before },
+        ...filter
+    };
+
+    return this.find(query)
+        .sort({ timestamp: sort })
+        .limit(limit)
+        .lean();
 };
 
 MessageSchema.statics.getUnreadMessages = function(userId, groupId) {
@@ -127,5 +144,59 @@ MessageSchema.statics.getUnreadMessages = function(userId, groupId) {
         readBy: { $ne: userId }
     }).sort({ timestamp: 1 }).lean();
 };
+
+MessageSchema.statics.cleanOldMessages = async function(groupId, daysOld = 30) {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+
+    return this.deleteMany({
+        groupId,
+        timestamp: { $lt: cutoffDate },
+        'attachments.0': { $exists: false },
+        'metadata.pinned': false
+    });
+};
+
+MessageSchema.statics.searchMessages = async function(groupId, query, options = {}) {
+    const {
+        limit = 20,
+        skip = 0,
+        sort = { timestamp: -1 }
+    } = options;
+
+    return this.find({
+        groupId,
+        $text: { $search: query }
+    })
+    .sort(sort)
+    .skip(skip)
+    .limit(limit)
+    .lean();
+};
+
+// Virtual for read receipt count
+MessageSchema.virtual('readCount').get(function() {
+    return this.metadata.readBy.length;
+});
+
+// Add attachment validation
+MessageSchema.pre('save', function(next) {
+    if (this.attachments && this.attachments.length > 0) {
+        const maxSize = 15 * 1024 * 1024; // 15MB
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'video/mp4', 'application/pdf'];
+        
+        for (const attachment of this.attachments) {
+            if (attachment.size > maxSize) {
+                next(new Error('File size exceeds maximum limit'));
+                return;
+            }
+            if (!allowedTypes.includes(attachment.type)) {
+                next(new Error('File type not allowed'));
+                return;
+            }
+        }
+    }
+    next();
+});
 
 module.exports = mongoose.model('Message', MessageSchema);
