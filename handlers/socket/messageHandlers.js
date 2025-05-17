@@ -1,9 +1,9 @@
-const { Message, Group } = require('../../models');
 const sanitizeHtml = require('sanitize-html');
 const { v4: uuidv4 } = require('uuid');
 const { encrypt, decrypt } = require('../../utils/encryption');
 const messageSearch = require('../../utils/messageSearch');
 const rateLimiter = require('../../utils/rateLimiter');
+const store = require('../../models/memoryStore');
 
 // Message cache with LRU implementation
 class MessageCache {
@@ -178,13 +178,13 @@ class OfflineMessageQueue {
 const offlineQueue = new OfflineMessageQueue();
 
 const createMessageHandlers = (io, socket, users, groups) => {
-    // Message sending function
+    // Handle sending messages
     const handleSendMessage = async ({ text, groupId, attachments = [] }, callback) => {
         try {
-            const user = users.get(socket.id);
+            const user = store.users.get(socket.id);
             if (!user) return callback({ error: 'Authentication required' });
 
-            const group = await Group.findOne({ id: groupId });
+            const group = store.groups.get(groupId);
             if (!group || !group.members.includes(socket.id)) {
                 return callback({ error: 'Group access denied' });
             }
@@ -215,16 +215,9 @@ const createMessageHandlers = (io, socket, users, groups) => {
                 }))
             };
 
-            try {
-                await Message.create(message);
-                messageCache.set(groupId, message);
-            } catch (err) {
-                if (!socket.connected) {
-                    offlineQueue.addMessage(groupId, message);
-                    return callback({ success: true, queued: true });
-                }
-                throw err;
-            }
+            // Store message in memory
+            await store.createMessage(message);
+            messageCache.set(groupId, message);
 
             const messageToSend = { ...message };
             if (message.encrypted) {
@@ -243,53 +236,28 @@ const createMessageHandlers = (io, socket, users, groups) => {
     // Handle message pinning
     const handlePinMessage = async ({ messageId, groupId }, callback) => {
         try {
-            const user = users.get(socket.id);
+            const user = store.users.get(socket.id);
             if (!user) return callback({ error: 'Authentication required' });
 
-            const group = await Group.findOne({ id: groupId });
+            const group = store.groups.get(groupId);
             if (!group || !group.members.includes(socket.id)) {
                 return callback({ error: 'Group access denied' });
             }
 
-            if (!group.isAdminOrModerator(socket.id)) {
-                return callback({ error: 'Only admins and moderators can pin messages' });
-            }
-
-            const message = await Message.findOne({ id: messageId });
+            const message = await store.findMessages({ id: messageId })[0];
             if (!message) return callback({ error: 'Message not found' });
 
-            if (!group.pinnedMessages) group.pinnedMessages = [];
-            
-            if (group.pinnedMessages.includes(messageId)) {
-                return callback({ error: 'Message is already pinned' });
-            }
-
-            const maxPinned = 10;
-            if (group.pinnedMessages.length >= maxPinned) {
-                return callback({ error: `Cannot pin more than ${maxPinned} messages` });
-            }
-
-            group.pinnedMessages.push(messageId);
-            await group.save();
-
-            message.isPinned = true;
-            message.pinnedBy = {
-                id: socket.id,
-                username: user.username
-            };
-            message.pinnedAt = new Date();
-            await message.save();
-
+            await store.pinMessage(messageId, socket.id);
             messageCache.updateMessage(groupId, messageId, {
                 isPinned: true,
-                pinnedBy: message.pinnedBy,
-                pinnedAt: message.pinnedAt
+                pinnedBy: user.username,
+                pinnedAt: new Date()
             });
 
             io.to(groupId).emit('message-pinned', {
                 messageId,
-                pinnedBy: message.pinnedBy,
-                timestamp: message.pinnedAt
+                pinnedBy: user.username,
+                timestamp: new Date()
             });
 
             callback({ success: true });

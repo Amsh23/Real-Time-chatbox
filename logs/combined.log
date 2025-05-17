@@ -195,3 +195,16 @@
 {"address":"127.0.0.1","code":"ECONNREFUSED","errno":-111,"level":"error","message":"❌ Redis connection error: connect ECONNREFUSED 127.0.0.1:6379","port":6379,"service":"chatbox","stack":"Error: connect ECONNREFUSED 127.0.0.1:6379\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1611:16)","syscall":"connect","timestamp":"2025-05-11 17:11:44"}
 {"level":"info","message":"Falling back to in-memory adapter","service":"chatbox","timestamp":"2025-05-11 17:11:44"}
 {"level":"error","message":"Graceful shutdown timed out after 10s, forcing exit","service":"chatbox","timestamp":"2025-05-11 17:11:53"}
+{"level":"info","message":"Graceful shutdown handler initialized","service":"chatbox","timestamp":"2025-05-14 11:39:19"}
+{"level":"info","message":"Redis modules loaded successfully","service":"chatbox","timestamp":"2025-05-14 11:39:19"}
+{"level":"info","message":"SKIP_MONGODB=true: Running in test mode without MongoDB connection","service":"chatbox","timestamp":"2025-05-14 11:39:19"}
+{"level":"info","message":"Attempting to configure Redis adapter...","service":"chatbox","timestamp":"2025-05-14 11:39:19"}
+{"level":"info","message":"Redis unavailable, using in-memory session store","service":"chatbox","timestamp":"2025-05-14 11:39:19"}
+{"level":"info","message":"Anti-sleep mechanism not started: not in production or no app URL defined","service":"chatbox","timestamp":"2025-05-14 11:39:19"}
+{"level":"info","message":"Server registered with graceful shutdown handler","service":"chatbox","timestamp":"2025-05-14 11:39:19"}
+{"level":"info","message":"سرور در حال اجرا روی پورت 3000","service":"chatbox","timestamp":"2025-05-14 11:39:20"}
+{"level":"info","message":"حالت: development","service":"chatbox","timestamp":"2025-05-14 11:39:20"}
+{"level":"info","message":"آدرس دسترسی: http://localhost:3000","service":"chatbox","timestamp":"2025-05-14 11:39:20"}
+{"address":"127.0.0.1","code":"ECONNREFUSED","errno":-111,"level":"error","message":"❌ Redis connection error: connect ECONNREFUSED 127.0.0.1:6379","port":6379,"service":"chatbox","stack":"Error: connect ECONNREFUSED 127.0.0.1:6379\n    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1611:16)","syscall":"connect","timestamp":"2025-05-14 11:39:20"}
+{"level":"info","message":"Falling back to in-memory adapter","service":"chatbox","timestamp":"2025-05-14 11:39:20"}
+{"level":"error","message":"Health check error: mongoose is not defined","service":"chatbox","stack":"ReferenceError: mongoose is not defined\n    at /workspaces/Real-Time-chatbox/server.js:421:27","timestamp":"2025-05-14 11:39:47"}

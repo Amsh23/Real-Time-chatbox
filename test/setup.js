@@ -1,27 +1,24 @@
 require('dotenv').config({ path: '.env.test' });
-const mongoose = require('mongoose');
+const store = require('../models/memoryStore');
 
 // Increase timeout for integration tests
-jest.setTimeout(30000);
+jest.setTimeout(10000);
 
-// Clear all mocks between tests
+// Clear store and mocks between tests
 beforeEach(() => {
+    // Reset all stores
+    store.messages.clear();
+    store.users.clear();
+    store.groups.clear();
+    store.pinnedMessages.clear();
+    store.messageHistory.clear();
+    store.searchIndex.clear();
+    store.reactions.clear();
+    store.fileUploads.clear();
+    store.typingUsers.clear();
+    store.offlineQueue.clear();
+    store.messageDeliveryStatus.clear();
+
+    // Clear all Jest mocks
     jest.clearAllMocks();
-});
-
-// Cleanup database after each test
-afterEach(async () => {
-    if (mongoose.connection.readyState === 1) {
-        const collections = await mongoose.connection.db.collections();
-        for (let collection of collections) {
-            await collection.deleteMany({});
-        }
-    }
-});
-
-// Close database connection after all tests
-afterAll(async () => {
-    if (mongoose.connection.readyState === 1) {
-        await mongoose.connection.close();
-    }
 });

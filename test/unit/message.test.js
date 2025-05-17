@@ -1,18 +1,15 @@
-const Message = require('../../models/message');
 const sanitizeHtml = require('sanitize-html');
-const mongoose = require('mongoose');
-const { MongoMemoryServer } = require('mongodb-memory-server');
+const store = require('../../models/memoryStore');
 
-let mongoServer;
-
-beforeAll(async () => {
-    mongoServer = await MongoMemoryServer.create();
-    await mongoose.connect(mongoServer.getUri());
-});
-
-afterAll(async () => {
-    await mongoose.disconnect();
-    await mongoServer.stop();
+beforeEach(() => {
+    // Clear store before each test
+    store.messages.clear();
+    store.pinnedMessages.clear();
+    store.messageHistory.clear();
+    store.searchIndex.clear();
+    store.reactions.clear();
+    store.fileUploads.clear();
+    store.typingUsers.clear();
 });
 
 describe('Message Handling', () => {
@@ -30,23 +27,22 @@ describe('Message Handling', () => {
         const maxLength = 2000;
         const longMessage = 'a'.repeat(maxLength + 1);
         
-        const message = new Message({
+        const message = await store.createMessage({
             id: 'test-id',
             text: longMessage,
             sender: 'test-sender',
             username: 'test-user',
             groupId: 'test-group'
-        });
+        }).catch(err => err);
 
-        const validationError = await message.validate().catch(err => err);
-        expect(validationError).toBeTruthy();
-        expect(validationError.errors.text).toBeTruthy();
+        expect(message).toHaveProperty('error');
+        expect(message.error).toContain('Message too long');
     });
 });
 
 describe('Message Management', () => {
     test('should handle message pinning', async () => {
-        const message = new Message({
+        const message = await store.createMessage({
             id: 'test-pin-id',
             text: 'Test message',
             sender: 'test-sender',
@@ -54,11 +50,11 @@ describe('Message Management', () => {
             groupId: 'test-group'
         });
 
-        message.metadata = {
-            pinned: true,
-            pinnedBy: 'admin-id',
-            pinnedAt: new Date()
-        };
+        await store.pinMessage('test-pin-id', 'admin-id');
+        const pinnedMessage = await store.findMessages({ id: 'test-pin-id' });
+        
+        expect(pinnedMessage[0].metadata.pinned).toBeTruthy();
+        expect(pinnedMessage[0].metadata.pinnedBy).toBe('admin-id');
 
         await message.validate();
         expect(message.metadata.pinned).toBeTruthy();

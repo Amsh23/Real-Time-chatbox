@@ -5,9 +5,13 @@ const socketIo = require('socket.io');
 const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
+
+// Initialize Express app
+const app = express();
+
+// Import required modules
 const sanitizeHtml = require('sanitize-html');
 const cors = require('cors');
-const mongoose = require('mongoose');
 const session = require('express-session');
 const compression = require('compression');
 const helmet = require('helmet');
@@ -75,9 +79,6 @@ mongoManager.connect().catch(err => {
     logger.error('Failed to connect to MongoDB:', err);
     // Don't exit the process, let the manager handle reconnection
 });
-
-// Initialize Express app
-const app = express();
 const server = http.createServer(app);
 
 // Configure Socket.IO with optimal settings for Render
@@ -413,6 +414,19 @@ app.use('/uploads',
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
 
+// Serve static files
+app.use(express.static('public'));
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.status(200).json({
+        status: 'ok',
+        uptime: process.uptime(),
+        timestamp: new Date().toISOString(),
+        connections: io ? io.engine.clientsCount : 0
+    });
+});
+
 // Add health check endpoint optimized for Render
 app.get('/health', async (req, res) => {
     try {
@@ -478,6 +492,24 @@ app.use((err, req, res, next) => {
 // Add catch-all route for SPA
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).json({
+        status: 'error',
+        message: 'Something went wrong!',
+        error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
+});
+
+// 404 handler
+app.use((req, res) => {
+    res.status(404).json({
+        status: 'error',
+        message: 'Not Found'
+    });
 });
 
 // Start server
