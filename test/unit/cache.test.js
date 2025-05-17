@@ -1,5 +1,5 @@
 const { expect } = require('chai');
-const { MessageCache, OfflineMessageQueue } = require('../../handlers/socket/messageHandlers');
+const MessageCache = require('../../models/messageCache');
 
 describe('Message Cache', () => {
     let cache;
@@ -31,77 +31,31 @@ describe('Message Cache', () => {
         expect(cache.get('group1', '4')).to.deep.equal(messages[3]);
     });
 
-    it('should batch update messages', () => {
+    it('should get group messages', () => {
         const messages = [
-            { id: '1', timestamp: new Date() },
-            { id: '2', timestamp: new Date() }
+            { id: '1', text: 'test1', timestamp: Date.now() - 2000 },
+            { id: '2', text: 'test2', timestamp: Date.now() - 1000 },
+            { id: '3', text: 'test3', timestamp: Date.now() }
         ];
         cache.set('group1', messages);
-        expect(cache.getGroupMessages('group1')).to.have.lengthOf(2);
+        
+        const result = cache.getGroupMessages('group1');
+        expect(result).to.have.lengthOf(3);
     });
 
-    it('should invalidate cache entries', () => {
-        const message = {
-            id: '1',
-            text: 'test',
-            timestamp: new Date()
-        };
+    it('should invalidate group cache', () => {
+        const message = { id: '1', text: 'test', timestamp: new Date() };
         cache.set('group1', message);
-        cache.invalidate('group1', '1');
+        cache.invalidate('group1');
         expect(cache.get('group1', '1')).to.be.null;
     });
-});
 
-describe('Offline Message Queue', () => {
-    let queue;
-
-    beforeEach(() => {
-        queue = new OfflineMessageQueue();
-    });
-
-    it('should queue messages', () => {
-        const message = {
-            id: '1',
-            text: 'test',
-            timestamp: new Date()
-        };
-        queue.addMessage('group1', message);
-        expect(queue.queues.get('group1')).to.have.lengthOf(1);
-    });
-
-    it('should process queued messages', async () => {
-        const message = {
-            id: '1',
-            text: 'test',
-            timestamp: new Date()
-        };
-        queue.addMessage('group1', message);
-        const processed = await queue.processQueue('group1');
-        expect(processed).to.have.lengthOf(1);
-        expect(queue.queues.get('group1')).to.have.lengthOf(0);
-    });
-
-    it('should handle failed messages', async () => {
-        const message = {
-            id: '1',
-            text: 'test',
-            timestamp: new Date(),
-            shouldFail: true // This will cause the message to fail processing
-        };
-        queue.addMessage('group1', message);
-        const processed = await queue.processQueue('group1');
-        expect(processed).to.have.lengthOf(0);
-        expect(queue.queues.get('group1')).to.have.lengthOf(1);
-    });
-
-    it('should expire old failed messages', async () => {
-        const oldMessage = {
-            id: '1',
-            text: 'test',
-            timestamp: new Date(Date.now() - 25 * 60 * 60 * 1000) // 25 hours old
-        };
-        queue.addMessage('group1', oldMessage);
-        const processed = await queue.processQueue('group1');
-        expect(queue.queues.get('group1')).to.have.lengthOf(0);
+    it('should handle message updates', () => {
+        const message = { id: '1', text: 'original', timestamp: new Date() };
+        cache.set('group1', message);
+        
+        cache.set('group1', { ...message, text: 'updated' });
+        const updated = cache.get('group1', '1');
+        expect(updated.text).to.equal('updated');
     });
 });

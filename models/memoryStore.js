@@ -14,8 +14,20 @@ class MemoryStore {
         this.messageDeliveryStatus = new Map();
     }
 
-    // Message operations
+    // Message validation
+    async validateMessage(message) {
+        const maxLength = parseInt(process.env.MAX_MESSAGE_LENGTH) || 2000;
+        if (message.text && message.text.length > maxLength) {
+            throw new Error(`Message too long. Maximum length is ${maxLength} characters.`);
+        }
+        return true;
+    }
+
+    // Create a message with validation
     async createMessage({ id, text, sender, username, groupId, metadata = {} }) {
+        // Validate message length
+        await this.validateMessage({ text });
+
         const message = {
             id,
             text,
@@ -26,6 +38,7 @@ class MemoryStore {
             createdAt: new Date(),
             updatedAt: new Date()
         };
+
         this.messages.set(id, message);
         this.updateSearchIndex(message);
         return message;
@@ -68,8 +81,15 @@ class MemoryStore {
 
     // Search functionality
     updateSearchIndex(message) {
-        const searchText = `${message.text} ${message.username}`.toLowerCase();
-        this.searchIndex.set(message.id, searchText);
+        const tokens = [
+            ...message.text.toLowerCase().split(/\s+/),
+            message.username.toLowerCase()
+        ];
+        tokens.forEach(token => {
+            let messages = this.searchIndex.get(token) || [];
+            messages.push(message);
+            this.searchIndex.set(token, messages);
+        });
     }
 
     async searchMessages(query, groupId) {
@@ -97,7 +117,9 @@ class MemoryStore {
     // Pinned messages
     async pinMessage(messageId, userId) {
         const message = this.messages.get(messageId);
-        if (!message) return null;
+        if (!message) {
+            throw new Error('Message not found');
+        }
 
         message.metadata = {
             ...message.metadata,
@@ -105,7 +127,13 @@ class MemoryStore {
             pinnedBy: userId,
             pinnedAt: new Date()
         };
-        this.pinnedMessages.set(messageId, message);
+
+        let groupPinnedMessages = this.pinnedMessages.get(message.groupId) || [];
+        if (!groupPinnedMessages.some(m => m.id === messageId)) {
+            groupPinnedMessages = [...groupPinnedMessages, message];
+            this.pinnedMessages.set(message.groupId, groupPinnedMessages);
+        }
+
         return message;
     }
 
@@ -126,6 +154,37 @@ class MemoryStore {
     async getPinnedMessages(groupId) {
         return Array.from(this.pinnedMessages.values())
             .filter(msg => msg.groupId === groupId);
+    }
+
+    // Message editing
+    async editMessage(messageId, newText) {
+        const message = this.messages.get(messageId);
+        if (!message) {
+            throw new Error('Message not found');
+        }
+
+        const oldText = message.text;
+        message.text = newText;
+        message.metadata = {
+            ...message.metadata,
+            edited: true,
+            editHistory: [
+                ...(message.metadata.editHistory || []),
+                { text: oldText, timestamp: new Date() }
+            ]
+        };
+        message.updatedAt = new Date();
+
+        return message;
+    }
+
+    // Validation
+    async validateMessage(message) {
+        const maxLength = parseInt(process.env.MAX_MESSAGE_LENGTH) || 2000;
+        if (message.text && message.text.length > maxLength) {
+            throw new Error(`Message too long. Maximum length is ${maxLength} characters.`);
+        }
+        return true;
     }
 
     // Cleanup methods

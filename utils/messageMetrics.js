@@ -1,33 +1,31 @@
 const { performance } = require('perf_hooks');
-const { MessageCache } = require('../../handlers/socket/messageHandlers');
+const MessageCache = require('../models/messageCache');
 
 class MessageHandlerMetrics {
     constructor() {
         this.metrics = {
-            sendMessage: [],
-            loadMessages: [],
+            messagesSent: 0,
+            messagesReceived: 0,
+            errors: 0,
             cacheHits: 0,
             cacheMisses: 0,
+            averageResponseTime: 0,
             offlineQueueSize: 0
         };
+        this.operationTimes = new Map();
     }
 
     recordMetric(operation, duration) {
-        if (!this.metrics[operation]) {
-            this.metrics[operation] = [];
-        }
-        this.metrics[operation].push(duration);
-
-        // Keep only last 1000 measurements
-        if (this.metrics[operation].length > 1000) {
-            this.metrics[operation].shift();
-        }
+        const times = this.operationTimes.get(operation) || [];
+        times.push(duration);
+        if (times.length > 100) times.shift(); // Keep last 100 measurements
+        this.operationTimes.set(operation, times);
     }
 
     getAverageMetric(operation) {
-        const measurements = this.metrics[operation];
-        if (!measurements || measurements.length === 0) return 0;
-        return measurements.reduce((a, b) => a + b, 0) / measurements.length;
+        const times = this.operationTimes.get(operation);
+        if (!times || times.length === 0) return 0;
+        return times.reduce((a, b) => a + b, 0) / times.length;
     }
 
     recordCacheHit() {
@@ -40,8 +38,7 @@ class MessageHandlerMetrics {
 
     getCacheHitRate() {
         const total = this.metrics.cacheHits + this.metrics.cacheMisses;
-        if (total === 0) return 0;
-        return this.metrics.cacheHits / total;
+        return total === 0 ? 0 : (this.metrics.cacheHits / total) * 100;
     }
 
     updateOfflineQueueSize(size) {
@@ -50,10 +47,14 @@ class MessageHandlerMetrics {
 
     getMetrics() {
         return {
-            averageSendTime: this.getAverageMetric('sendMessage'),
-            averageLoadTime: this.getAverageMetric('loadMessages'),
+            ...this.metrics,
             cacheHitRate: this.getCacheHitRate(),
-            offlineQueueSize: this.metrics.offlineQueueSize
+            averageOperationTimes: Object.fromEntries(
+                Array.from(this.operationTimes.entries()).map(([op, times]) => [
+                    op,
+                    times.reduce((a, b) => a + b, 0) / times.length
+                ])
+            )
         };
     }
 }

@@ -1,89 +1,81 @@
-const { RateLimiter } = require('limiter');
+/**
+ * Rate limiter for Socket.IO events
+ * Uses in-memory storage with configurable limits
+ */
 
-class MessageRateLimiter {
+class RateLimiter {
     constructor() {
-        // Rate limits for different operations
+        // Store request counts by client ID and action type
+        this.requests = new Map();
+        
+        // Default rate limits (can be overridden in .env)
         this.limits = {
-            sendMessage: new RateLimiter({
-                tokensPerInterval: 10,
-                interval: 'second'
-            }),
-            fileUpload: new RateLimiter({
-                tokensPerInterval: 5,
-                interval: 'minute'
-            }),
-            reaction: new RateLimiter({
-                tokensPerInterval: 20,
-                interval: 'second'
-            }),
-            search: new RateLimiter({
-                tokensPerInterval: 5,
-                interval: 'second'
-            })
+            'message': parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
+            'join': 10,
+            'search': 30,
+            'upload': 5
         };
-
-        // Track per-user rate limits
-        this.userLimits = new Map();
-    }
-
-    async checkRateLimit(socketId, operation) {
-        // Get or create user-specific limiter
-        if (!this.userLimits.has(socketId)) {
-            this.userLimits.set(socketId, {
-                sendMessage: new RateLimiter({
-                    tokensPerInterval: 30,
-                    interval: 'minute'
-                }),
-                fileUpload: new RateLimiter({
-                    tokensPerInterval: 10,
-                    interval: 'minute'
-                })
-            });
-        }
-
-        const userLimiter = this.userLimits.get(socketId);
         
-        try {
-            // Check global limit
-            await this.limits[operation].removeTokens(1);
+        // Time window in milliseconds (default: 1 minute)
+        this.windowMs = parseInt(process.env.RATE_LIMIT_WINDOW) || 60000;
+        
+        // Clean up expired entries every minute
+        setInterval(() => this.cleanup(), 60000);
+    }
+    
+    /**
+     * Check if a client has exceeded their rate limit for a given action
+     * @param {string} clientId - Socket.io client ID
+     * @param {string} action - Action type (message, join, etc.)
+     * @returns {boolean} - True if rate limited, false otherwise
+     */
+    async checkLimit(clientId, action = 'message') {
+        const key = `${clientId}:${action}`;
+        const now = Date.now();
+        const windowStart = now - this.windowMs;
+        
+        // Get current requests or initialize a new array
+        const clientRequests = this.requests.get(key) || [];
+        
+        // Filter out expired requests
+        const validRequests = clientRequests.filter(timestamp => timestamp > windowStart);
+        
+        // Get the limit for this action
+        const limit = this.limits[action] || this.limits.message;
+        
+        // Check if limit exceeded
+        if (validRequests.length >= limit) {
+            return true; // Rate limited
+        }
+        
+        // Add current request and update the store
+        validRequests.push(now);
+        this.requests.set(key, validRequests);
+        
+        return false; // Not rate limited
+    }
+    
+    /**
+     * Remove expired entries to prevent memory leaks
+     */
+    cleanup() {
+        const now = Date.now();
+        const windowStart = now - this.windowMs;
+        
+        for (const [key, timestamps] of this.requests.entries()) {
+            // Filter out expired timestamps
+            const validTimestamps = timestamps.filter(ts => ts > windowStart);
             
-            // Check user-specific limit if it exists
-            if (userLimiter[operation]) {
-                await userLimiter[operation].removeTokens(1);
+            if (validTimestamps.length === 0) {
+                // Remove empty entries
+                this.requests.delete(key);
+            } else if (validTimestamps.length !== timestamps.length) {
+                // Update with only valid timestamps
+                this.requests.set(key, validTimestamps);
             }
-
-            return true;
-        } catch (err) {
-            return false;
         }
-    }
-
-    getTimeToNext(socketId, operation) {
-        const globalNext = this.limits[operation].getTokensRemaining();
-        const userLimiter = this.userLimits.get(socketId);
-        
-        if (!userLimiter || !userLimiter[operation]) {
-            return Math.ceil(globalNext * 1000);
-        }
-
-        const userNext = userLimiter[operation].getTokensRemaining();
-        return Math.max(Math.ceil(globalNext * 1000), Math.ceil(userNext * 1000));
-    }
-
-    resetLimits(socketId) {
-        this.userLimits.delete(socketId);
-    }
-
-    getRateLimitInfo(socketId) {
-        const info = {};
-        for (const [operation, limiter] of Object.entries(this.limits)) {
-            info[operation] = {
-                remaining: limiter.getTokensRemaining(),
-                timeToNext: this.getTimeToNext(socketId, operation)
-            };
-        }
-        return info;
     }
 }
 
-module.exports = new MessageRateLimiter();
+// Export singleton instance
+module.exports = new RateLimiter();

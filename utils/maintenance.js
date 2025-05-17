@@ -1,6 +1,64 @@
-const { Message, Group } = require('../models');
 const fs = require('fs').promises;
 const path = require('path');
+
+// Skip model imports if running in SKIP_MONGODB mode
+let Message, Group;
+try {
+    if (process.env.SKIP_MONGODB !== 'true') {
+        const models = require('../models');
+        Message = models.Message;
+        Group = models.Group;
+    }
+} catch (err) {
+    console.warn('Models could not be loaded, maintenance functions will be limited');
+}
+
+// Setup maintenance mode middleware
+function setupMaintenanceMode(app) {
+    // Check if maintenance mode is enabled in environment
+    const isMaintenanceMode = process.env.MAINTENANCE_MODE === 'true';
+    
+    if (isMaintenanceMode) {
+        console.log('⚠️ Maintenance mode is ENABLED');
+        
+        // Add middleware that will handle all requests during maintenance
+        app.use((req, res, next) => {
+            // Allow health checks to pass through
+            if (req.path === '/health') {
+                return next();
+            }
+            
+            // Return a maintenance page or JSON response
+            if (req.headers.accept && req.headers.accept.includes('application/json')) {
+                return res.status(503).json({
+                    status: 'error',
+                    message: 'Service is under maintenance. Please try again later.'
+                });
+            }
+            
+            res.status(503).send(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Maintenance</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+                        h1 { color: #333; }
+                        .container { max-width: 600px; margin: 0 auto; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <h1>Under Maintenance</h1>
+                        <p>Our service is currently undergoing scheduled maintenance.</p>
+                        <p>Please check back shortly. We apologize for any inconvenience.</p>
+                    </div>
+                </body>
+                </html>
+            `);
+        });
+    }
+}
 
 // Clean up old messages
 const cleanupOldMessages = async (daysOld = 30) => {
@@ -134,5 +192,6 @@ module.exports = {
     cleanupUnusedUploads,
     cleanupInactiveGroups,
     cleanupMemoryCache,
-    scheduleMaintenanceTasks
+    scheduleMaintenanceTasks,
+    setupMaintenanceMode
 };

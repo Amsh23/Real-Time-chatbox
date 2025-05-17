@@ -29,23 +29,23 @@ class MongoDBManager {
   async connect() {
     // Check for test or development mode without MongoDB requirement
     if (process.env.SKIP_MONGODB === 'true') {
-      logger.info('SKIP_MONGODB=true: Running in test mode without MongoDB connection');
+      logger.info('SKIP_MONGODB=true: Running in memory-only mode without MongoDB connection');
       this.isConnected = true;
-      return;
+      return true; // Return success
     }
     
-    if (!config.mongodb.uri) {
+    if (!config.mongodb || !config.mongodb.uri) {
       if (process.env.NODE_ENV === 'development') {
         logger.warn('MongoDB URI is not defined in development mode. Running with limited functionality.');
         this.isConnected = true;
-        return;
+        return true; // Return success
       }
       throw new Error('MongoDB URI is not defined in configuration');
     }
     
     // Enhanced options for Render free tier
     const enhancedOptions = {
-      ...config.mongodb.options,
+      ...(config.mongodb.options || {}),
       serverSelectionTimeoutMS: 5000,
       heartbeatFrequencyMS: 30000, // Reduce heartbeat frequency (default: 10000)
       socketTimeoutMS: 45000,
@@ -57,16 +57,10 @@ class MongoDBManager {
     try {
       logger.info('Connecting to MongoDB...');
       await mongoose.connect(config.mongodb.uri, enhancedOptions);
+      return true;
     } catch (err) {
       logger.error('MongoDB initial connection error:', err);
-      
-      if (process.env.NODE_ENV === 'development') {
-        logger.warn('MongoDB connection failed in development mode. Running with limited functionality.');
-        this.isConnected = true;
-        return;
-      }
-      
-      this.scheduleReconnect();
+      return false;
     }
   }
   

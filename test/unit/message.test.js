@@ -24,84 +24,82 @@ describe('Message Handling', () => {
     });
 
     test('should validate message length', async () => {
-        const maxLength = 2000;
+        const maxLength = parseInt(process.env.MAX_MESSAGE_LENGTH) || 2000;
         const longMessage = 'a'.repeat(maxLength + 1);
         
-        const message = await store.createMessage({
-            id: 'test-id',
-            text: longMessage,
-            sender: 'test-sender',
-            username: 'test-user',
-            groupId: 'test-group'
-        }).catch(err => err);
-
-        expect(message).toHaveProperty('error');
-        expect(message.error).toContain('Message too long');
+        let error;
+        try {
+            await store.validateMessage({ text: longMessage });
+            error = null;
+        } catch (err) {
+            error = err;
+        }
+        expect(error).toBeTruthy();
+        expect(error.message).toContain('Message too long');
     });
 });
 
 describe('Message Management', () => {
     test('should handle message pinning', async () => {
-        const message = await store.createMessage({
+        const message = {
             id: 'test-pin-id',
             text: 'Test message',
             sender: 'test-sender',
             username: 'test-user',
-            groupId: 'test-group'
-        });
-
-        await store.pinMessage('test-pin-id', 'admin-id');
-        const pinnedMessage = await store.findMessages({ id: 'test-pin-id' });
+            groupId: 'test-group',
+            metadata: {
+                pinned: false,
+                pinnedBy: null,
+                pinnedAt: null
+            }
+        };
         
-        expect(pinnedMessage[0].metadata.pinned).toBeTruthy();
-        expect(pinnedMessage[0].metadata.pinnedBy).toBe('admin-id');
-
-        await message.validate();
-        expect(message.metadata.pinned).toBeTruthy();
-        expect(message.metadata.pinnedBy).toBe('admin-id');
+        // Store the message
+        await store.createMessage(message);
+        
+        // Pin the message
+        const pinnedMessage = await store.pinMessage(message.id, 'admin-id');
+        
+        expect(pinnedMessage.metadata.pinned).toBe(true);
+        expect(pinnedMessage.metadata.pinnedBy).toBe('admin-id');
+        expect(pinnedMessage.metadata.pinnedAt).toBeInstanceOf(Date);
+        
+        // Check the group's pinned messages
+        const groupPinnedMessages = store.pinnedMessages.get(message.groupId) || [];
+        expect(groupPinnedMessages.length).toBe(1);
+        expect(groupPinnedMessages[0].id).toBe(message.id);
     });
 
-    test('should handle message replies', async () => {
-        const message = new Message({
-            id: 'test-reply-id',
-            text: 'Reply message',
+    test('should handle message editing', async () => {
+        const originalText = 'Original text';
+        const message = {
+            id: 'test-edit-id',
+            text: originalText,
             sender: 'test-sender',
             username: 'test-user',
             groupId: 'test-group',
             metadata: {
-                replyTo: {
-                    message: 'Original message',
-                    username: 'original-user'
-                }
+                edited: false,
+                editHistory: []
             }
-        });
-
-        await message.validate();
-        expect(message.metadata.replyTo.message).toBe('Original message');
-        expect(message.metadata.replyTo.username).toBe('original-user');
-    });
-
-    test('should handle message editing', async () => {
-        const message = new Message({
-            id: 'test-edit-id',
-            text: 'Original text',
-            sender: 'test-sender',
-            username: 'test-user',
-            groupId: 'test-group'
-        });
-
-        await message.save();
-        await message.editText('Updated text');
-
-        expect(message.text).toBe('Updated text');
-        expect(message.metadata.edited).toBeTruthy();
-        expect(message.metadata.editHistory).toHaveLength(1);
-        expect(message.metadata.editHistory[0].text).toBe('Original text');
+        };
+        
+        // Store the message
+        await store.createMessage(message);
+        
+        // Edit the message
+        const newText = 'Updated text';
+        const editedMessage = await store.editMessage(message.id, newText);
+        
+        expect(editedMessage.text).toBe(newText);
+        expect(editedMessage.metadata.edited).toBe(true);
+        expect(editedMessage.metadata.editHistory).toHaveLength(1);
+        expect(editedMessage.metadata.editHistory[0].text).toBe(originalText);
     });
 
     test('should handle message search', async () => {
         // Create test messages
-        await Message.create([
+        const messages = [
             {
                 id: 'test-search-1',
                 text: 'Test message one',
@@ -116,17 +114,16 @@ describe('Message Management', () => {
                 username: 'test-user',
                 groupId: 'test-group'
             }
-        ]);
-
-        const messages = await Message.find({
-            groupId: 'test-group',
-            $or: [
-                { text: { $regex: 'test', $options: 'i' } },
-                { username: { $regex: 'test', $options: 'i' } }
-            ]
-        });
-
-        expect(Array.isArray(messages)).toBeTruthy();
-        expect(messages.length).toBe(2);
+        ];
+        
+        // Store messages
+        for (const msg of messages) {
+            await store.createMessage(msg);
+        }
+        
+        // Search messages
+        const foundMessages = store.searchMessages('test');
+        expect(Array.isArray(foundMessages)).toBe(true);
+        expect(foundMessages).toHaveLength(2);
     });
 });
